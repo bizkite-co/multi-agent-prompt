@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "multi-agent-prompt"
+version = "0.1.0"
+description = "A crash-proof, autosaving prompt editor for AI coding agent CLIs — compose in your real editor, hand off with a slash command"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Mark Stouffer", email = "1802850+InTEGr8or@users.noreply.github.com" }
+]
+dependencies = [
+    "verkit>=0.1.4",
+]
+
+[project.scripts]
+multi-agent-prompt = "multi_agent_prompt.cli:main"
+map = "multi_agent_prompt.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/multi_agent_prompt"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
