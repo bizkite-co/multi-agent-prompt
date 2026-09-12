@@ -46,6 +46,7 @@ DEFAULT_DEBOUNCE_MS = 2000
 DEFAULT_NVIM_BIN = "nvim"
 DEFAULT_CLEAR_KEY = "<leader>pc"
 DEFAULT_HISTORY_KEY = "<leader>ph"
+DEFAULT_HELP_KEY = "g?"
 
 
 def build_autosave_lua(
@@ -53,12 +54,15 @@ def build_autosave_lua(
     clear_key: str | None = DEFAULT_CLEAR_KEY,
     history_dir: Path | None = None,
     history_key: str | None = DEFAULT_HISTORY_KEY,
+    help_key: str | None = DEFAULT_HELP_KEY,
 ) -> str:
     """Lua snippet, scoped to the current buffer only.
 
     Always: autosave (debounced + on focus-lost) and auto-reload on
-    focus-gained. Optionally: the clear keymap, and — when ``history_dir`` is
-    given — the archive-browsing keymap.
+    focus-gained. Optionally: the clear keymap, the archive-browsing keymap
+    (when ``history_dir`` is given), and a ``g?`` cheatsheet listing whichever
+    of those two are actually active — reflecting real overrides, not just
+    the defaults, since it's built from the same values passed in here.
     """
     lua = f"""
 local uv = vim.uv or vim.loop
@@ -149,6 +153,45 @@ vim.keymap.set("n", "{history_key}", function()
 end, {{ buffer = 0, desc = "multi-agent-prompt: browse archived prompts" }})
 """.rstrip()
 
+    if help_key:
+        entries = []
+        if clear_key:
+            entries.append((clear_key, "archive current draft & clear"))
+        if history_dir and history_key:
+            entries.append((history_key, "browse archived drafts"))
+        entries.append((help_key, "show this help"))
+        width = max(len(k) for k, _ in entries)
+        help_lines = ", ".join(
+            f'"  {k.ljust(width)}  {desc}"' for k, desc in entries
+        )
+        lua += f"""
+vim.keymap.set("n", "{help_key}", function()
+  local lines = {{ " multi-agent-prompt ", "", {help_lines} }}
+  local width = 0
+  for _, l in ipairs(lines) do
+    width = math.max(width, vim.fn.strdisplaywidth(l))
+  end
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].bufhidden = "wipe"
+  local win = vim.api.nvim_open_win(buf, true, {{
+    relative = "cursor",
+    row = 1,
+    col = 0,
+    width = width + 2,
+    height = #lines,
+    style = "minimal",
+    border = "rounded",
+  }})
+  local close = function()
+    pcall(vim.api.nvim_win_close, win, true)
+  end
+  vim.keymap.set("n", "q", close, {{ buffer = buf, nowait = true }})
+  vim.keymap.set("n", "<Esc>", close, {{ buffer = buf, nowait = true }})
+end, {{ buffer = 0, desc = "multi-agent-prompt: show keymap help" }})
+""".rstrip()
+
     return lua
 
 
@@ -159,9 +202,10 @@ def build_nvim_command(
     clean: bool = False,
     clear_key: str | None = DEFAULT_CLEAR_KEY,
     history_key: str | None = DEFAULT_HISTORY_KEY,
+    help_key: str | None = DEFAULT_HELP_KEY,
     insert: bool = True,
 ) -> list[str]:
-    """The argv to launch nvim on ``file`` with autosave (and the clear/history keymaps) enabled.
+    """The argv to launch nvim on ``file`` with autosave (and the clear/history/help keymaps) enabled.
 
     ``clean=True`` passes ``-u NONE``, skipping the user's init.lua (and every
     plugin it loads) entirely — a fast, minimal mode for when startup latency
@@ -174,7 +218,11 @@ def build_nvim_command(
     """
     history_dir = file.parent / ARCHIVE_DIRNAME
     lua = build_autosave_lua(
-        debounce_ms, clear_key=clear_key, history_dir=history_dir, history_key=history_key
+        debounce_ms,
+        clear_key=clear_key,
+        history_dir=history_dir,
+        history_key=history_key,
+        help_key=help_key,
     )
     argv = [nvim_bin]
     if clean:
@@ -198,6 +246,7 @@ def open_editor(
     clean: bool = False,
     clear_key: str | None = DEFAULT_CLEAR_KEY,
     history_key: str | None = DEFAULT_HISTORY_KEY,
+    help_key: str | None = DEFAULT_HELP_KEY,
     insert: bool = True,
 ) -> int:
     """Open ``file`` in nvim (inheriting the terminal) with autosave. Returns nvim's exit code."""
@@ -211,6 +260,7 @@ def open_editor(
         clean=clean,
         clear_key=clear_key,
         history_key=history_key,
+        help_key=help_key,
         insert=insert,
     )
     env = {**os.environ, "MAP_SESSION": "1"}

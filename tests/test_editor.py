@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from multi_agent_prompt.editor import (
     DEFAULT_CLEAR_KEY,
+    DEFAULT_HELP_KEY,
     DEFAULT_HISTORY_KEY,
     build_autosave_lua,
     build_nvim_command,
@@ -16,7 +17,7 @@ def test_build_autosave_lua_interpolates_debounce():
 
 
 def test_build_autosave_lua_scopes_autocmds_to_current_buffer():
-    lua = build_autosave_lua(clear_key=None)
+    lua = build_autosave_lua(clear_key=None, help_key=None)
 
     # TextChanged/TextChangedI (save), FocusLost/BufLeave (save),
     # FocusGained/BufEnter (reload) — one group each, all buffer-local.
@@ -43,7 +44,7 @@ def test_build_autosave_lua_reloads_on_focus_gained_and_buf_enter():
 
 
 def test_build_autosave_lua_registers_clear_keymap_by_default():
-    lua = build_autosave_lua()
+    lua = build_autosave_lua(help_key=None)
 
     assert f'"{DEFAULT_CLEAR_KEY}"' in lua
     assert "vim.keymap.set" in lua
@@ -61,7 +62,7 @@ def test_build_autosave_lua_clear_key_is_configurable():
 
 
 def test_build_autosave_lua_omits_keymap_when_clear_key_is_none():
-    lua = build_autosave_lua(clear_key=None)
+    lua = build_autosave_lua(clear_key=None, help_key=None)
 
     assert "vim.keymap.set" not in lua
     assert "map clear" not in lua
@@ -77,7 +78,7 @@ def test_build_autosave_lua_clear_writes_before_shelling_out():
 
 
 def test_build_autosave_lua_omits_history_keymap_without_a_directory():
-    lua = build_autosave_lua(history_dir=None, clear_key=None)
+    lua = build_autosave_lua(history_dir=None, clear_key=None, help_key=None)
 
     assert "vim.keymap.set" not in lua
     assert DEFAULT_HISTORY_KEY not in lua
@@ -100,6 +101,40 @@ def test_build_autosave_lua_archived_drafts_are_marked_readonly(tmp_path):
 
     assert "readonly = true" in lua
     assert "modifiable = false" in lua
+
+
+def test_build_autosave_lua_registers_help_keymap_by_default():
+    lua = build_autosave_lua(clear_key=None, history_dir=None)
+
+    assert f'"{DEFAULT_HELP_KEY}"' in lua
+    assert "nvim_open_win" in lua
+
+
+def test_build_autosave_lua_omits_help_keymap_when_disabled():
+    lua = build_autosave_lua(clear_key=None, history_dir=None, help_key=None)
+
+    assert "vim.keymap.set" not in lua
+    assert "nvim_open_win" not in lua
+
+
+def test_build_autosave_lua_help_only_lists_whats_actually_active():
+    """The cheatsheet must reflect real overrides, not just print the
+    defaults regardless of what was actually configured for this session."""
+    lua_all = build_autosave_lua(history_dir=None)  # clear on, history off
+    assert DEFAULT_CLEAR_KEY in lua_all
+    assert "browse archived drafts" not in lua_all
+
+    lua_none = build_autosave_lua(clear_key=None, history_dir=None)
+    assert "archive current draft" not in lua_none
+    assert "browse archived drafts" not in lua_none
+    assert f'"{DEFAULT_HELP_KEY}"' in lua_none  # help itself always listed
+
+
+def test_build_autosave_lua_help_key_is_configurable():
+    lua = build_autosave_lua(clear_key=None, history_dir=None, help_key="<F1>")
+
+    assert '"<F1>"' in lua
+    assert DEFAULT_HELP_KEY not in lua
 
 
 def test_build_nvim_command_basic(tmp_path):
@@ -155,6 +190,14 @@ def test_build_nvim_command_no_history_key_omits_it(tmp_path):
     argv = build_nvim_command(file, history_key=None)
 
     assert "vsplit" not in " ".join(argv)
+
+
+def test_build_nvim_command_no_help_key_omits_it(tmp_path):
+    file = tmp_path / "current.md"
+
+    argv = build_nvim_command(file, help_key=None)
+
+    assert "nvim_open_win" not in " ".join(argv)
 
 
 def test_build_nvim_command_respects_custom_binary(tmp_path):

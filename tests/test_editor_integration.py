@@ -221,3 +221,42 @@ def test_history_keymap_lists_and_opens_an_archived_draft_readonly(tmp_path):
     name, readonly = result.split("|")
     assert name == str(archive_dir / "20260101T000000-1.md")
     assert readonly == "true"
+
+
+def test_help_keymap_shows_and_closes_a_cheatsheet(tmp_path):
+    file = tmp_path / "current.md"
+    file.write_text("")
+
+    argv = build_nvim_command(file, clean=True)
+
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave)
+    os.close(slave)
+    result_file = tmp_path / "result.txt"
+    try:
+        time.sleep(0.5)
+        os.write(master, b"\x1b")  # ensure normal mode
+        time.sleep(0.1)
+        os.write(master, b"g?")
+        time.sleep(0.4)
+        lua_cmd = (
+            ":lua local b = vim.api.nvim_get_current_buf(); "
+            "local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false); "
+            "vim.fn.writefile("
+            "{tostring(vim.fn.winnr('$')) .. '|' .. table.concat(lines, '~')}, "
+            f'"{result_file}")\r'
+        )
+        os.write(master, lua_cmd.encode())
+        time.sleep(0.3)
+        os.write(master, b":qa!\r:qa!\r:qa!\r")
+        proc.wait(timeout=10)
+    finally:
+        os.close(master)
+        if proc.poll() is None:
+            proc.kill()
+
+    winnr, content = result_file.read_text().strip().split("|", 1)
+    assert winnr == "2"  # the float, on top of the one editing window
+    assert "archive current draft" in content
+    assert "browse archived drafts" in content
+    assert "show this help" in content

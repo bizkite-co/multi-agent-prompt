@@ -7,6 +7,7 @@ from multi_agent_prompt import archive, paths
 from multi_agent_prompt.editor import (
     DEFAULT_CLEAR_KEY,
     DEFAULT_DEBOUNCE_MS,
+    DEFAULT_HELP_KEY,
     DEFAULT_HISTORY_KEY,
     nvim_available,
     open_editor,
@@ -34,6 +35,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         clean=args.clean,
         clear_key=None if args.no_clear_key else args.clear_key,
         history_key=None if args.no_history_key else args.history_key,
+        help_key=None if args.no_help_key else args.help_key,
         insert=not args.no_insert,
     )
 
@@ -131,6 +133,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Don't register the in-editor archive-browsing keymap at all",
     )
     edit_parser.add_argument(
+        "--help-key",
+        default=DEFAULT_HELP_KEY,
+        help=(
+            "Buffer-local normal-mode keymap that shows a cheatsheet of "
+            f"whichever keymaps are active (default: {DEFAULT_HELP_KEY})"
+        ),
+    )
+    edit_parser.add_argument(
+        "--no-help-key",
+        action="store_true",
+        help="Don't register the in-editor help keymap at all",
+    )
+    edit_parser.add_argument(
         "--no-insert",
         action="store_true",
         help="Open in normal mode instead of dropping straight into insert mode",
@@ -203,6 +218,8 @@ def main(argv: list[str] | None = None) -> None:
         args.no_clear_key = False
         args.history_key = DEFAULT_HISTORY_KEY
         args.no_history_key = False
+        args.help_key = DEFAULT_HELP_KEY
+        args.no_help_key = False
         args.no_insert = False
         args.func = cmd_edit
 

@@ -54,7 +54,10 @@ When you're done, switch back to the agent pane and either:
 
 Also want to browse past drafts without leaving the editor? A buffer-local
 keymap — `<leader>ph` by default — lists archived drafts (newest first) in a
-split; `<CR>` opens one, read-only:
+split; `<CR>` opens one, read-only. Forgot what any of this is bound to?
+Press `g?` — it shows exactly the keymaps active for *this* session
+(respecting any `--clear-key`/`--history-key` overrides, and omitting
+whichever ones you disabled):
 
 ```
 map            # open the scratch file (same as `map edit`)
@@ -70,6 +73,8 @@ map edit --clear-key '<F5>'      # rebind the in-editor clear keymap
 map edit --no-clear-key          # don't register it at all
 map edit --history-key '<F6>'    # rebind the in-editor history-browse keymap
 map edit --no-history-key        # don't register it at all
+map edit --help-key '<F1>'       # rebind the in-editor g? cheatsheet keymap
+map edit --no-help-key           # don't register it at all
 map edit --no-insert             # open in normal mode instead of insert mode
 map clear --keep 20              # override how many archived drafts to retain
 map clear --no-archive           # discard instead of archiving (e.g. it had a secret in it)
@@ -116,7 +121,25 @@ knowing, from actually measuring it (not guessing):
   expensive line in your *own* init.lua behind
   `if not vim.env.MAP_SESSION then ... end`, if you want full-config speed
   back without giving up faster `map` startup. That's your config to edit,
-  not something this tool does for you.
+  not something this tool does for you. This isn't just for the clipboard
+  line above — a scratch prompt buffer has no use for a file-tree sidebar or
+  git tooling either, and with [lazy.nvim](https://github.com/folke/lazy.nvim)
+  you can skip those specific plugins the same way, with `cond` on the spec:
+
+  ```lua
+  return {
+    'nvim-neo-tree/neo-tree.nvim',
+    cond = not vim.env.MAP_SESSION,
+    -- ...
+  }
+  ```
+
+  Confirmed on this project's own dev config: with `neo-tree.nvim` and
+  `gitsigns.nvim` guarded this way, `<leader>e` (NeoTree's toggle) becomes a
+  no-op in a `map` session, and their entire module trees (dozens of
+  individual `require()` calls each) simply don't load — real startup
+  savings, not just fewer keymaps to trip over. `cond` is evaluated on every
+  start, so this takes effect immediately; no `:Lazy sync`/restart needed.
 - **It's specifically a startup cost, not a per-save one.** The clipboard
   probe runs once, while your init.lua is sourced, not again on autosave, on
   `FocusLost`, or when you switch panes and type `/prompt` — that last step
