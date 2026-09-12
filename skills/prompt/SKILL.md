@@ -16,19 +16,21 @@ the result to you with `/prompt` instead of retyping or pasting it.
 
 ## What to do
 
-1. If the `map` CLI is on `PATH`, run `map pop` from the project's working
-   directory. This does everything in one step: prints the current draft,
-   archives it to the rolling history, and clears the file — so the next
-   `/prompt` starts fresh without the user (or you) having to remember a
-   separate clear step.
+1. Run `map pop` from the project's working directory — **one shell call,
+   don't check `which map` first.** This does everything in one step:
+   prints the current draft, archives it to the rolling history, and clears
+   the file, so the next `/prompt` starts fresh. Checking PATH before
+   running it is a wasted round trip almost every time; just run it and
+   handle failure.
 
-2. If `map` is **not** on `PATH`, fall back to reading
-   `<repo-root>/.ma/prompt/current.md` directly (walk up from the current
-   working directory to the nearest `.git` root to find it). In this
-   fallback path, **do not** clear or archive the file yourself — you can't
-   replicate `map`'s archive-then-prune behavior with a plain file write
-   without risking losing the draft, so just leave it as-is and mention to
-   the user that `map` isn't installed/on PATH.
+2. If that fails specifically because `map` isn't installed/on PATH
+   ("command not found" or similar — not some other error), fall back to
+   reading `<repo-root>/.ma/prompt/current.md` directly (walk up from the
+   current working directory to the nearest `.git` root to find it). In
+   this fallback path, **do not** clear or archive the file yourself — you
+   can't replicate `map`'s archive-then-prune behavior with a plain file
+   write without risking losing the draft, so just leave it as-is and
+   mention to the user that `map` isn't installed/on PATH.
 
 3. If the output/content is empty: tell the user there's nothing in the
    scratch file yet — don't invent a request or proceed as if they'd asked

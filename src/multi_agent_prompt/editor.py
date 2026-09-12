@@ -2,9 +2,11 @@
 
 This deliberately does not touch the user's ``init.lua`` or try to
 reimplement Vim: it loads their actual config as-is (so keymaps, colorscheme,
-and plugins "just work" without any import step) and layers small,
-buffer-local additions on top via ``-c``, so none of it can ever affect any
-other buffer or session:
+and plugins "just work" without any import step) and layers small additions
+on top via ``-c``. Each ``map`` invocation is its own throwaway nvim
+process, so none of this can ever reach the user's other, real nvim
+sessions — but not everything below is *buffer*-local within this one
+session; see fold-on-paste.
 
   * Autosave, debounced (``debounce_ms`` after the last edit) — the everyday
     case — and immediately on ``FocusLost``/``BufLeave``, so switching to the
@@ -25,6 +27,16 @@ other buffer or session:
     it may be intercepted by whatever directory-handling plugin (neo-tree,
     oil.nvim, ...) the user has, which is inconsistent with ``--clean``.
     This tiny listing works identically either way.
+  * Fold-on-paste: pasting ``fold_threshold`` lines or more (bracketed
+    paste, `"+p`, `"*p`, ...) automatically folds (and closes) just those
+    lines, via Neovim's ``vim.paste()`` override — so dropping a long CLI
+    transcript or diff into the buffer doesn't bury the rest of what you're
+    writing. Standard Vim fold commands (``za``/``zo``/``zc``) toggle it;
+    nothing new to bind for that part. ``vim.paste`` is a *global* hook, not
+    a buffer-local option — this does apply to any other buffer opened
+    within this same throwaway session (e.g. one opened via the history
+    keymap), which is fine here since every buffer in this session is
+    another scratch markdown file.
 
 The launched nvim gets ``MAP_SESSION=1`` in its environment — nothing in
 this package reads it, but it's there for a user who wants to guard an
@@ -47,6 +59,7 @@ DEFAULT_NVIM_BIN = "nvim"
 DEFAULT_CLEAR_KEY = "<leader>pc"
 DEFAULT_HISTORY_KEY = "<leader>ph"
 DEFAULT_HELP_KEY = "g?"
+DEFAULT_FOLD_THRESHOLD = 6
 
 
 def build_autosave_lua(
@@ -55,14 +68,16 @@ def build_autosave_lua(
     history_dir: Path | None = None,
     history_key: str | None = DEFAULT_HISTORY_KEY,
     help_key: str | None = DEFAULT_HELP_KEY,
+    fold_threshold: int | None = DEFAULT_FOLD_THRESHOLD,
 ) -> str:
     """Lua snippet, scoped to the current buffer only.
 
     Always: autosave (debounced + on focus-lost) and auto-reload on
     focus-gained. Optionally: the clear keymap, the archive-browsing keymap
-    (when ``history_dir`` is given), and a ``g?`` cheatsheet listing whichever
-    of those two are actually active — reflecting real overrides, not just
-    the defaults, since it's built from the same values passed in here.
+    (when ``history_dir`` is given), fold-on-paste (when ``fold_threshold``
+    is a positive int), and a ``g?`` cheatsheet listing whichever of those
+    are actually active — reflecting real overrides, not just the defaults,
+    since it's built from the same values passed in here.
     """
     lua = f"""
 local uv = vim.uv or vim.loop
@@ -153,12 +168,40 @@ vim.keymap.set("n", "{history_key}", function()
 end, {{ buffer = 0, desc = "multi-agent-prompt: browse archived prompts" }})
 """.rstrip()
 
+    if fold_threshold and fold_threshold > 0:
+        # vim.paste() is Neovim's single hook for every paste source
+        # (bracketed/terminal paste, "+p, "*p, ...), called with the
+        # complete line list for a small paste (phase -1) or streamed in
+        # chunks for a large one (phase 1/2/3). Track cursor position across
+        # the call rather than trust `#lines` alone, since a chunked paste's
+        # individual calls don't each carry the full line count.
+        lua += f"""
+local map_orig_paste = vim.paste
+local map_paste_start = nil
+vim.paste = function(lines, phase)
+  if phase == 1 or phase == -1 then
+    map_paste_start = vim.api.nvim_win_get_cursor(0)[1]
+  end
+  local ok = map_orig_paste(lines, phase)
+  if (phase == -1 or phase == 3) and map_paste_start then
+    local paste_end = vim.api.nvim_win_get_cursor(0)[1]
+    if paste_end - map_paste_start >= {fold_threshold} then
+      vim.cmd(string.format("%d,%dfold", map_paste_start, paste_end))
+    end
+    map_paste_start = nil
+  end
+  return ok
+end
+""".rstrip()
+
     if help_key:
         entries = []
         if clear_key:
             entries.append((clear_key, "archive current draft & clear"))
         if history_dir and history_key:
             entries.append((history_key, "browse archived drafts"))
+        if fold_threshold and fold_threshold > 0:
+            entries.append(("za/zo/zc", f"toggle fold ({fold_threshold}+ line pastes auto-fold)"))
         entries.append((help_key, "show this help"))
         width = max(len(k) for k, _ in entries)
         help_lines = ", ".join(
@@ -203,9 +246,10 @@ def build_nvim_command(
     clear_key: str | None = DEFAULT_CLEAR_KEY,
     history_key: str | None = DEFAULT_HISTORY_KEY,
     help_key: str | None = DEFAULT_HELP_KEY,
+    fold_threshold: int | None = DEFAULT_FOLD_THRESHOLD,
     insert: bool = True,
 ) -> list[str]:
-    """The argv to launch nvim on ``file`` with autosave (and the clear/history/help keymaps) enabled.
+    """The argv to launch nvim on ``file`` with autosave (and the clear/history/help/fold keymaps) enabled.
 
     ``clean=True`` passes ``-u NONE``, skipping the user's init.lua (and every
     plugin it loads) entirely — a fast, minimal mode for when startup latency
@@ -223,6 +267,7 @@ def build_nvim_command(
         history_dir=history_dir,
         history_key=history_key,
         help_key=help_key,
+        fold_threshold=fold_threshold,
     )
     argv = [nvim_bin]
     if clean:
@@ -247,6 +292,7 @@ def open_editor(
     clear_key: str | None = DEFAULT_CLEAR_KEY,
     history_key: str | None = DEFAULT_HISTORY_KEY,
     help_key: str | None = DEFAULT_HELP_KEY,
+    fold_threshold: int | None = DEFAULT_FOLD_THRESHOLD,
     insert: bool = True,
 ) -> int:
     """Open ``file`` in nvim (inheriting the terminal) with autosave. Returns nvim's exit code."""
@@ -261,6 +307,7 @@ def open_editor(
         clear_key=clear_key,
         history_key=history_key,
         help_key=help_key,
+        fold_threshold=fold_threshold,
         insert=insert,
     )
     env = {**os.environ, "MAP_SESSION": "1"}

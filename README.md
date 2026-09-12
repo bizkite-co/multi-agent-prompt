@@ -52,6 +52,11 @@ When you're done, switch back to the agent pane and either:
   supports file mentions and can see gitignored files — this is a plain
   read, so unlike `/prompt` it doesn't archive or clear anything.
 
+Pasting a long CLI transcript or diff in? Anything **6 lines or more**
+(bracketed paste, `"+p`, `"*p` — any paste source) auto-folds, closed, so it
+doesn't bury the rest of what you're writing — `za`/`zo`/`zc` (standard Vim)
+toggle it open.
+
 Also want to browse past drafts without leaving the editor? A buffer-local
 keymap — `<leader>ph` by default — lists archived drafts (newest first) in a
 split; `<CR>` opens one, read-only. Forgot what any of this is bound to?
@@ -75,6 +80,8 @@ map edit --history-key '<F6>'    # rebind the in-editor history-browse keymap
 map edit --no-history-key        # don't register it at all
 map edit --help-key '<F1>'       # rebind the in-editor g? cheatsheet keymap
 map edit --no-help-key           # don't register it at all
+map edit --fold-threshold 3      # auto-fold pastes of 3+ lines instead of 6
+map edit --no-fold-paste         # don't auto-fold pastes at all
 map edit --no-insert             # open in normal mode instead of insert mode
 map clear --keep 20              # override how many archived drafts to retain
 map clear --no-archive           # discard instead of archiving (e.g. it had a secret in it)
@@ -147,6 +154,16 @@ knowing, from actually measuring it (not guessing):
   plain filesystem read and write). If a session still feels slow at the
   hand-off moment specifically, that's terminal pane-switching or the
   agent's own slash-command overhead, not this tool or Neovim.
+- **`/prompt`'s own overhead is small, and it isn't Neovim's.** Measured on
+  this project's own dev machine: `map pop` runs in ~60-85ms end to end —
+  bare `python3 -c pass` alone is ~30ms of that, this package's own imports
+  add maybe another ~20ms, and the rest is the file read/archive/write. If
+  `/prompt` still feels slow, that latency lives in the *agent host's* own
+  tool-call round trip (spawning/sandboxing the shell command), not in
+  anything this package does — there's no nvim process in this path at all.
+  The one thing the `prompt` skill itself controls: it runs `map pop`
+  directly rather than checking `which map` first, since that check is a
+  second subprocess spawn that's a wasted round trip almost every time.
 
 ## Agent integration
 

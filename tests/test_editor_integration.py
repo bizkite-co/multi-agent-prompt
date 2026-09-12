@@ -260,3 +260,75 @@ def test_help_keymap_shows_and_closes_a_cheatsheet(tmp_path):
     assert "archive current draft" in content
     assert "browse archived drafts" in content
     assert "show this help" in content
+
+
+def _paste_via_bracketed_paste(master, text: str) -> None:
+    """Simulate what a real terminal sends for a paste: text wrapped in the
+    bracketed-paste escape sequence, which is how Neovim's vim.paste() gets
+    invoked at all — plain os.write of the raw characters does not trigger
+    it, it just looks like fast typing.
+    """
+    os.write(master, b"\x1b[200~" + text.encode() + b"\x1b[201~")
+
+
+def test_paste_at_or_above_threshold_creates_a_closed_fold(tmp_path):
+    file = tmp_path / "current.md"
+    file.write_text("")
+
+    argv = build_nvim_command(file, clean=True, clear_key=None, history_key=None, help_key=None)
+
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave)
+    os.close(slave)
+    result_file = tmp_path / "result.txt"
+    try:
+        time.sleep(0.5)  # already in insert mode (default)
+        _paste_via_bracketed_paste(master, "\n".join(f"line {i}" for i in range(10)))
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        time.sleep(0.2)
+        lua_check = (
+            ':lua vim.fn.writefile({tostring(vim.fn.foldclosed(1)) .. "|" .. '
+            f'tostring(vim.fn.line("$"))}}, "{result_file}")\r'
+        )
+        os.write(master, lua_check.encode())
+        time.sleep(0.3)
+        os.write(master, b":qa!\r:qa!\r")
+        proc.wait(timeout=10)
+    finally:
+        os.close(master)
+        if proc.poll() is None:
+            proc.kill()
+
+    foldclosed, total_lines = result_file.read_text().strip().split("|")
+    assert total_lines == "10"
+    assert foldclosed == "1"  # a closed fold starting at line 1 covers the paste
+
+
+def test_paste_below_threshold_is_not_folded(tmp_path):
+    file = tmp_path / "current.md"
+    file.write_text("")
+
+    argv = build_nvim_command(file, clean=True, clear_key=None, history_key=None, help_key=None)
+
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave)
+    os.close(slave)
+    result_file = tmp_path / "result.txt"
+    try:
+        time.sleep(0.5)
+        _paste_via_bracketed_paste(master, "\n".join(f"line {i}" for i in range(3)))
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        time.sleep(0.2)
+        lua_check = f':lua vim.fn.writefile({{tostring(vim.fn.foldclosed(1))}}, "{result_file}")\r'
+        os.write(master, lua_check.encode())
+        time.sleep(0.3)
+        os.write(master, b":qa!\r:qa!\r")
+        proc.wait(timeout=10)
+    finally:
+        os.close(master)
+        if proc.poll() is None:
+            proc.kill()
+
+    assert result_file.read_text().strip() == "-1"  # no fold: foldclosed() returns -1

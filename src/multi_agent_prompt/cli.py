@@ -7,6 +7,7 @@ from multi_agent_prompt import archive, paths
 from multi_agent_prompt.editor import (
     DEFAULT_CLEAR_KEY,
     DEFAULT_DEBOUNCE_MS,
+    DEFAULT_FOLD_THRESHOLD,
     DEFAULT_HELP_KEY,
     DEFAULT_HISTORY_KEY,
     nvim_available,
@@ -36,6 +37,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         clear_key=None if args.no_clear_key else args.clear_key,
         history_key=None if args.no_history_key else args.history_key,
         help_key=None if args.no_help_key else args.help_key,
+        fold_threshold=None if args.no_fold_paste else args.fold_threshold,
         insert=not args.no_insert,
     )
 
@@ -146,6 +148,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Don't register the in-editor help keymap at all",
     )
     edit_parser.add_argument(
+        "--fold-threshold",
+        type=int,
+        default=DEFAULT_FOLD_THRESHOLD,
+        help=(
+            "Auto-fold a paste of this many lines or more, closed by default "
+            f"(za/zo/zc to toggle) (default: {DEFAULT_FOLD_THRESHOLD})"
+        ),
+    )
+    edit_parser.add_argument(
+        "--no-fold-paste",
+        action="store_true",
+        help="Don't auto-fold large pastes at all",
+    )
+    edit_parser.add_argument(
         "--no-insert",
         action="store_true",
         help="Open in normal mode instead of dropping straight into insert mode",
@@ -220,6 +236,8 @@ def main(argv: list[str] | None = None) -> None:
         args.no_history_key = False
         args.help_key = DEFAULT_HELP_KEY
         args.no_help_key = False
+        args.fold_threshold = DEFAULT_FOLD_THRESHOLD
+        args.no_fold_paste = False
         args.no_insert = False
         args.func = cmd_edit
 

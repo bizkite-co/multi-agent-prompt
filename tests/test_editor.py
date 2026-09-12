@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from multi_agent_prompt.editor import (
     DEFAULT_CLEAR_KEY,
+    DEFAULT_FOLD_THRESHOLD,
     DEFAULT_HELP_KEY,
     DEFAULT_HISTORY_KEY,
     build_autosave_lua,
@@ -137,6 +138,46 @@ def test_build_autosave_lua_help_key_is_configurable():
     assert DEFAULT_HELP_KEY not in lua
 
 
+def test_build_autosave_lua_registers_fold_on_paste_by_default():
+    lua = build_autosave_lua(clear_key=None, history_dir=None, help_key=None)
+
+    assert "vim.paste = function" in lua
+    assert f">= {DEFAULT_FOLD_THRESHOLD}" in lua
+
+
+def test_build_autosave_lua_fold_threshold_is_configurable():
+    lua = build_autosave_lua(
+        clear_key=None, history_dir=None, help_key=None, fold_threshold=12
+    )
+
+    assert ">= 12" in lua
+    assert f">= {DEFAULT_FOLD_THRESHOLD}" not in lua
+
+
+def test_build_autosave_lua_omits_fold_on_paste_when_disabled():
+    lua = build_autosave_lua(
+        clear_key=None, history_dir=None, help_key=None, fold_threshold=None
+    )
+
+    assert "vim.paste" not in lua
+
+
+def test_build_autosave_lua_omits_fold_on_paste_when_threshold_zero():
+    lua = build_autosave_lua(
+        clear_key=None, history_dir=None, help_key=None, fold_threshold=0
+    )
+
+    assert "vim.paste" not in lua
+
+
+def test_build_autosave_lua_help_mentions_fold_toggle_when_active():
+    lua_on = build_autosave_lua(clear_key=None, history_dir=None)
+    assert "za/zo/zc" in lua_on
+
+    lua_off = build_autosave_lua(clear_key=None, history_dir=None, fold_threshold=None)
+    assert "za/zo/zc" not in lua_off
+
+
 def test_build_nvim_command_basic(tmp_path):
     file = tmp_path / "current.md"
 
@@ -198,6 +239,14 @@ def test_build_nvim_command_no_help_key_omits_it(tmp_path):
     argv = build_nvim_command(file, help_key=None)
 
     assert "nvim_open_win" not in " ".join(argv)
+
+
+def test_build_nvim_command_no_fold_paste_omits_it(tmp_path):
+    file = tmp_path / "current.md"
+
+    argv = build_nvim_command(file, fold_threshold=None)
+
+    assert "vim.paste" not in " ".join(argv)
 
 
 def test_build_nvim_command_respects_custom_binary(tmp_path):
