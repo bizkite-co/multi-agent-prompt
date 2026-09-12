@@ -7,8 +7,9 @@ keystroke, and give you almost no editing power while you write. `multi-agent-pr
 moves composition out of the chat box entirely: write in a real Neovim, in a
 split pane next to your agent session, autosaved to disk every couple of
 seconds so a crash or a fat-fingered shortcut can never cost you more than a
-moment of typing. When you're ready, hand it to the agent with `/prompt` or
-`@prompt.md`.
+moment of typing. When you're ready, hand it to the agent with `/prompt` —
+which reads it, archives it, and clears the file in one step, so there's no
+separate "now go clear it" to remember.
 
 ---
 
@@ -45,37 +46,44 @@ typing, and immediately when you switch away from the pane
 
 When you're done, switch back to the agent pane and either:
 
-- Type `/prompt` (if the agent's install includes the skill — see below), or
+- Type `/prompt` (if the agent's install includes the skill — see below) —
+  reads the draft, archives it, and clears the file, all in one step, or
 - Reference `@prompt.md` / `@.ma/prompt/current.md` directly, if your agent
-  supports file mentions and can see gitignored files.
+  supports file mentions and can see gitignored files — this is a plain
+  read, so unlike `/prompt` it doesn't archive or clear anything.
 
-Done with a draft? A buffer-local keymap — `<leader>pc` by default — archives
-it and clears the buffer, without leaving normal Vim editing (or your global
-keymaps) touched in any other buffer:
+Also want to browse past drafts without leaving the editor? A buffer-local
+keymap — `<leader>ph` by default — lists archived drafts (newest first) in a
+split; `<CR>` opens one, read-only:
 
 ```
 map            # open the scratch file (same as `map edit`)
 map where      # print the resolved file path
-map show       # print its current content to stdout
-map clear      # archive the current draft, then empty it
+map show       # print its current content to stdout (does not clear it)
+map pop        # print it, archive it, and clear it — what /prompt uses
+map clear      # archive the current draft, then empty it, without printing it
 map --clean    # skip your init.lua entirely (-u NONE) for faster startup
 ```
 
 ```
-map edit --clear-key '<F5>'   # rebind the in-editor clear key
-map edit --no-clear-key       # don't register it at all
-map edit --no-insert          # open in normal mode instead of insert mode
-map clear --keep 10           # override how many archived drafts to retain
-map clear --no-archive        # discard instead of archiving (e.g. it had a secret in it)
+map edit --clear-key '<F5>'      # rebind the in-editor clear keymap
+map edit --no-clear-key          # don't register it at all
+map edit --history-key '<F6>'    # rebind the in-editor history-browse keymap
+map edit --no-history-key        # don't register it at all
+map edit --no-insert             # open in normal mode instead of insert mode
+map clear --keep 20              # override how many archived drafts to retain
+map clear --no-archive           # discard instead of archiving (e.g. it had a secret in it)
 ```
+
+`map pop` accepts the same `--keep`/`--no-archive` as `map clear`.
 
 ### The archive
 
-`map clear` — from the CLI or the in-editor keymap, which shells out to the
-same command — never actually discards a non-empty draft; it moves it to
-`.ma/prompt/archive/<timestamp>.md` first, then prunes that archive down to
-the most recent entries. Pruning is by **count**, not age (`--keep` /
-`MAP_ARCHIVE_KEEP` env var, default **5**) — simpler to reason about than a
+`map pop`/`map clear` — from the CLI or the in-editor keymap, which shells
+out to `map clear` — never actually discard a non-empty draft; they move it
+to `.ma/prompt/archive/<timestamp>-<seq>.md` first, then prune that archive
+down to the most recent entries. Pruning is by **count**, not age (`--keep` /
+`MAP_ARCHIVE_KEEP` env var, default **10**) — simpler to reason about than a
 retention window, and it doesn't depend on the clock. Use `--no-archive` for
 the one case that shouldn't be kept anywhere: you pasted a secret and want it
 actually gone.
@@ -112,10 +120,10 @@ knowing, from actually measuring it (not guessing):
 - **It's specifically a startup cost, not a per-save one.** The clipboard
   probe runs once, while your init.lua is sourced, not again on autosave, on
   `FocusLost`, or when you switch panes and type `/prompt` — that last step
-  never touches nvim at all (`map show`/reading the file is a separate,
-  plain filesystem read). If a session still feels slow at the hand-off
-  moment specifically, that's terminal pane-switching or the agent's own
-  slash-command overhead, not this tool or Neovim.
+  never touches nvim at all (`map pop`/reading the file is a separate,
+  plain filesystem read and write). If a session still feels slow at the
+  hand-off moment specifically, that's terminal pane-switching or the
+  agent's own slash-command overhead, not this tool or Neovim.
 
 ## Agent integration
 
@@ -157,7 +165,16 @@ across agents rather than being re-tuned per host.
 - **`.gitignore` is managed for you.** The first time `map edit` runs in a
   git repo, it appends `.ma/prompt/` to `.gitignore` if it isn't already
   covered — including by a broader pre-existing `.ma/` entry.
-- **Nothing is cleared automatically, and clearing doesn't discard.** Reading
-  the file (via the skill, or `@prompt.md`) never deletes it, and `map clear`
-  archives before it empties. `--no-archive` is the explicit opt-out for
-  content that shouldn't be kept anywhere at all.
+- **Reading is non-destructive; handing off isn't, but it never discards
+  either.** `map show` and `@prompt.md` (file mention) just print/read — the
+  file is untouched either way. `/prompt` (`map pop`) clears it, because the
+  whole point is not needing a separate "now go clear it" step — but it
+  archives first, so "cleared" never means "gone". `--no-archive` is the
+  explicit opt-out for content that shouldn't be kept anywhere at all.
+- **The editor notices when the file changes out from under it.** `/prompt`
+  runs `map pop` from the *agent's* process, not from inside the running
+  nvim session — so if you're still looking at that buffer when you hand a
+  draft off, it auto-reloads (`autoread` + `checktime` on
+  `FocusGained`/`BufEnter`) the next time you focus it, rather than keep
+  showing the text you already submitted. It won't discard anything you've
+  since typed there unsaved.

@@ -7,6 +7,7 @@ from multi_agent_prompt import archive, paths
 from multi_agent_prompt.editor import (
     DEFAULT_CLEAR_KEY,
     DEFAULT_DEBOUNCE_MS,
+    DEFAULT_HISTORY_KEY,
     nvim_available,
     open_editor,
 )
@@ -32,6 +33,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         nvim_bin=args.nvim_bin,
         clean=args.clean,
         clear_key=None if args.no_clear_key else args.clear_key,
+        history_key=None if args.no_history_key else args.history_key,
         insert=not args.no_insert,
     )
 
@@ -57,6 +59,21 @@ def cmd_clear(args: argparse.Namespace) -> int:
     if archived_to is not None:
         print(f"Archived previous draft to {archived_to}", file=sys.stderr)
     print(f"Cleared {file}", file=sys.stderr)
+    return 0
+
+
+def cmd_pop(args: argparse.Namespace) -> int:
+    """Read the draft, archive it, clear the file, and print what was read — one operation.
+
+    This is what `/prompt` uses: hand the draft off and reset for the next
+    one in a single step, so there's no separate "now go clear it" the user
+    has to remember to do.
+    """
+    file = paths.prompt_file()
+    content = file.read_text(encoding="utf-8") if file.exists() else ""
+    keep = archive.resolve_archive_keep(args.keep)
+    archive.archive_and_clear(file, keep=keep, archive=not args.no_archive)
+    sys.stdout.write(content)
     return 0
 
 
@@ -101,6 +118,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Don't register the in-editor clear keymap at all",
     )
     edit_parser.add_argument(
+        "--history-key",
+        default=DEFAULT_HISTORY_KEY,
+        help=(
+            "Buffer-local normal-mode keymap that opens the archive directory "
+            f"(read-only) in a split (default: {DEFAULT_HISTORY_KEY})"
+        ),
+    )
+    edit_parser.add_argument(
+        "--no-history-key",
+        action="store_true",
+        help="Don't register the in-editor archive-browsing keymap at all",
+    )
+    edit_parser.add_argument(
         "--no-insert",
         action="store_true",
         help="Open in normal mode instead of dropping straight into insert mode",
@@ -116,6 +146,26 @@ def build_parser() -> argparse.ArgumentParser:
         "show", help="Print the scratch prompt file's current content"
     )
     show_parser.set_defaults(func=cmd_show)
+
+    pop_parser = subparsers.add_parser(
+        "pop",
+        help="Print the current draft, archive it, and clear the file — one operation",
+    )
+    pop_parser.add_argument(
+        "--keep",
+        type=int,
+        default=None,
+        help=(
+            f"How many archived drafts to retain (default: {archive.DEFAULT_ARCHIVE_KEEP}, "
+            f"or ${archive.KEEP_ENV_VAR})"
+        ),
+    )
+    pop_parser.add_argument(
+        "--no-archive",
+        action="store_true",
+        help="Discard the draft instead of archiving it (e.g. it contained a secret)",
+    )
+    pop_parser.set_defaults(func=cmd_pop)
 
     clear_parser = subparsers.add_parser(
         "clear", help="Archive the current draft, then empty the scratch prompt file"
@@ -151,6 +201,8 @@ def main(argv: list[str] | None = None) -> None:
         args.clean = False
         args.clear_key = DEFAULT_CLEAR_KEY
         args.no_clear_key = False
+        args.history_key = DEFAULT_HISTORY_KEY
+        args.no_history_key = False
         args.no_insert = False
         args.func = cmd_edit
 

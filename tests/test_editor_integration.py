@@ -168,3 +168,56 @@ def test_insert_mode_on_open_lets_you_type_without_pressing_i(tmp_path):
             proc.kill()
 
     assert file.read_text().strip() == "typed without pressing i first"
+
+
+def test_history_keymap_lists_and_opens_an_archived_draft_readonly(tmp_path):
+    """`:vsplit <archive_dir>` (netrw) was the first approach here, and it
+    doesn't hold up: netrw's directory browsing isn't available at all under
+    -u NONE (confirmed directly — even `:Explore` errors as "not an editor
+    command" there). This exercises the self-contained scratch-buffer
+    listing that replaced it, which doesn't depend on netrw either way.
+    """
+    file = tmp_path / "current.md"
+    file.write_text("")
+    archive_dir = file.parent / "archive"
+    archive_dir.mkdir()
+    (archive_dir / "20260101T000000-1.md").write_text("an old draft")
+
+    argv = build_nvim_command(file, clean=True, clear_key=None)
+
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave)
+    os.close(slave)
+    try:
+        time.sleep(0.5)
+        os.write(master, b"\x1b")  # ensure normal mode (insert mode is the default)
+        time.sleep(0.1)
+        os.write(master, b"\\ph")  # <leader>ph; mapleader is unset -> "\" under -u NONE
+        time.sleep(0.3)
+        os.write(master, b"\r")  # open the (only) listed file
+        time.sleep(0.3)
+        os.write(
+            master,
+            b":lua vim.g.map_test_result = "
+            b"vim.api.nvim_buf_get_name(0) .. '|' .. tostring(vim.bo.readonly)\r",
+        )
+        time.sleep(0.2)
+        # Write the result through a *different* file so we don't depend on
+        # scraping terminal escape sequences back out of the pty.
+        result_file = tmp_path / "result.txt"
+        os.write(
+            master,
+            f':call writefile([g:map_test_result], "{result_file}")\r'.encode(),
+        )
+        time.sleep(0.3)
+        os.write(master, b":qa!\r:qa!\r:qa!\r")
+        proc.wait(timeout=10)
+    finally:
+        os.close(master)
+        if proc.poll() is None:
+            proc.kill()
+
+    result = result_file.read_text().strip()
+    name, readonly = result.split("|")
+    assert name == str(archive_dir / "20260101T000000-1.md")
+    assert readonly == "true"

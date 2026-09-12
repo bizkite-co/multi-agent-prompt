@@ -43,6 +43,57 @@ def test_cmd_show_prints_content(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out == "draft content"
 
 
+def test_cmd_pop_prints_content_and_clears_in_one_step(tmp_path, monkeypatch, capsys):
+    """What /prompt uses: read + log + clear as one operation, no separate
+    `map clear` for the user (or the skill) to remember to run."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    (repo / ".ma" / "prompt").mkdir(parents=True)
+    target = repo / ".ma" / "prompt" / "current.md"
+    target.write_text("please do the thing")
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["pop"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert capsys.readouterr().out == "please do the thing"
+    assert target.read_text() == ""
+    archived = list((repo / ".ma" / "prompt" / "archive").glob("*.md"))
+    assert len(archived) == 1
+    assert archived[0].read_text() == "please do the thing"
+
+
+def test_cmd_pop_empty_when_file_missing(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["pop"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_cmd_pop_no_archive_flag_discards_content(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    (repo / ".ma" / "prompt").mkdir(parents=True)
+    target = repo / ".ma" / "prompt" / "current.md"
+    target.write_text("had a secret in it")
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["pop", "--no-archive"])
+    args.func(args)
+
+    assert target.read_text() == ""
+    assert not (repo / ".ma" / "prompt" / "archive").exists()
+
+
 def test_cmd_clear_empties_file(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)

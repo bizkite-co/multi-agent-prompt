@@ -13,12 +13,14 @@ import os
 import time
 from pathlib import Path
 
-DEFAULT_ARCHIVE_KEEP = 5
+from multi_agent_prompt.paths import ARCHIVE_DIRNAME
+
+DEFAULT_ARCHIVE_KEEP = 10
 KEEP_ENV_VAR = "MAP_ARCHIVE_KEEP"
 
 
 def resolve_archive_keep(override: int | None = None) -> int:
-    """CLI flag > MAP_ARCHIVE_KEEP env var > default (5)."""
+    """CLI flag > MAP_ARCHIVE_KEEP env var > default (10)."""
     if override is not None:
         return override
     raw = os.environ.get(KEEP_ENV_VAR)
@@ -78,7 +80,7 @@ def archive_and_clear(
     archived_to = None
 
     if archive and content.strip():
-        adir = file.parent / "archive"
+        adir = file.parent / ARCHIVE_DIRNAME
         adir.mkdir(parents=True, exist_ok=True)
         archived_to = _next_archive_path(adir)
         archived_to.write_text(content, encoding="utf-8")
