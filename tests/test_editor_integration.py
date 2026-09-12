@@ -16,6 +16,11 @@ pytestmark = pytest.mark.skipif(
     shutil.which("nvim") is None, reason="nvim not installed"
 )
 
+needs_map_on_path = pytest.mark.skipif(
+    shutil.which("map") is None,
+    reason="the `map` console script isn't on PATH (install this package first)",
+)
+
 
 def _run_headless(file, extra_cmds, timeout=10):
     lua = build_autosave_lua(debounce_ms=200)
@@ -86,3 +91,46 @@ def test_focus_lost_saves_immediately_without_waiting_for_debounce(tmp_path):
     subprocess.run(argv, timeout=10, capture_output=True, check=True)
 
     assert file.read_text().strip() == "written before losing focus"
+
+
+@needs_map_on_path
+def test_clear_keymap_archives_and_empties_via_real_map_clear(tmp_path):
+    """The in-editor clear keymap shells out to the real `map clear` — this
+    exercises that whole round trip: write, archive, truncate, reload."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    prompt_dir = repo / ".ma" / "prompt"
+    prompt_dir.mkdir(parents=True)
+    file = prompt_dir / "current.md"
+    file.write_text("")
+
+    lua = build_autosave_lua(debounce_ms=200)
+    argv = [
+        "nvim",
+        "--headless",
+        "-u",
+        "NONE",
+        "-c",
+        f"lua {lua}",
+        "-c",
+        'call feedkeys("ia draft worth keeping\\<Esc>", "x")',
+        "-c",
+        "lua vim.wait(50)",
+        # Single-quoted Vimscript string: <leader>pc resolves to the literal
+        # mapping \pc when mapleader is unset (as under -u NONE). A
+        # double-quoted "\pc" is ambiguous — \p isn't a recognized escape —
+        # so this must stay single-quoted.
+        "-c",
+        r"call feedkeys('\pc', 'x')",
+        "-c",
+        "lua vim.wait(300)",
+        "-c",
+        "qa!",
+        str(file),
+    ]
+    subprocess.run(argv, timeout=10, capture_output=True, check=True, cwd=repo)
+
+    assert file.read_text() == ""
+    archived = list((prompt_dir / "archive").glob("*.md"))
+    assert len(archived) == 1
+    assert archived[0].read_text().strip() == "a draft worth keeping"

@@ -17,13 +17,20 @@ def test_find_repo_root_falls_back_to_start_when_no_git(tmp_path):
     assert paths.find_repo_root(lonely) == lonely.resolve()
 
 
-def test_prompt_file_is_under_dot_map_at_repo_root(tmp_path):
+def test_prompt_file_is_under_ma_prompt_at_repo_root(tmp_path):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     nested = repo / "a" / "b"
     nested.mkdir(parents=True)
 
-    assert paths.prompt_file(nested) == repo / ".map" / "prompt.md"
+    assert paths.prompt_file(nested) == repo / ".ma" / "prompt" / "current.md"
+
+
+def test_archive_dir_is_under_the_prompt_dir(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    assert paths.archive_dir(repo) == repo / ".ma" / "prompt" / "archive"
 
 
 def test_ensure_gitignored_creates_gitignore(tmp_path):
@@ -33,7 +40,7 @@ def test_ensure_gitignored_creates_gitignore(tmp_path):
     changed = paths.ensure_gitignored(repo)
 
     assert changed is True
-    assert ".map/" in (repo / ".gitignore").read_text()
+    assert ".ma/prompt/" in (repo / ".gitignore").read_text()
 
 
 def test_ensure_gitignored_appends_to_existing_gitignore(tmp_path):
@@ -46,7 +53,7 @@ def test_ensure_gitignored_appends_to_existing_gitignore(tmp_path):
     text = (repo / ".gitignore").read_text()
     assert changed is True
     assert "*.pyc" in text
-    assert ".map/" in text
+    assert ".ma/prompt/" in text
 
 
 def test_ensure_gitignored_is_idempotent(tmp_path):
@@ -58,7 +65,7 @@ def test_ensure_gitignored_is_idempotent(tmp_path):
 
     assert first is True
     assert second is False
-    assert (repo / ".gitignore").read_text().count(".map/") == 1
+    assert (repo / ".gitignore").read_text().count(".ma/prompt/") == 1
 
 
 def test_ensure_gitignored_noop_without_git(tmp_path):
@@ -71,11 +78,23 @@ def test_ensure_gitignored_noop_without_git(tmp_path):
     assert not (lonely / ".gitignore").exists()
 
 
-def test_ensure_gitignored_respects_broader_existing_pattern(tmp_path):
+def test_ensure_gitignored_respects_exact_existing_pattern(tmp_path):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
-    (repo / ".gitignore").write_text(".map\n")
+    (repo / ".gitignore").write_text(".ma/prompt\n")
 
     changed = paths.ensure_gitignored(repo)
 
     assert changed is False
+
+
+def test_ensure_gitignored_respects_broader_ma_pattern(tmp_path):
+    """A sibling multi-agent-* product (or the user) may already ignore all of `.ma/`."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".gitignore").write_text(".ma/\n")
+
+    changed = paths.ensure_gitignored(repo)
+
+    assert changed is False
+    assert ".ma/prompt/" not in (repo / ".gitignore").read_text()

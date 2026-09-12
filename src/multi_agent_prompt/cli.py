@@ -3,8 +3,13 @@ from __future__ import annotations
 import argparse
 import sys
 
-from multi_agent_prompt import paths
-from multi_agent_prompt.editor import DEFAULT_DEBOUNCE_MS, nvim_available, open_editor
+from multi_agent_prompt import archive, paths
+from multi_agent_prompt.editor import (
+    DEFAULT_CLEAR_KEY,
+    DEFAULT_DEBOUNCE_MS,
+    nvim_available,
+    open_editor,
+)
 
 
 def cmd_edit(args: argparse.Namespace) -> int:
@@ -22,7 +27,11 @@ def cmd_edit(args: argparse.Namespace) -> int:
         print(f"Added {paths.GITIGNORE_PATTERN} to .gitignore", file=sys.stderr)
 
     return open_editor(
-        file, debounce_ms=args.debounce, nvim_bin=args.nvim_bin, clean=args.clean
+        file,
+        debounce_ms=args.debounce,
+        nvim_bin=args.nvim_bin,
+        clean=args.clean,
+        clear_key=None if args.no_clear_key else args.clear_key,
     )
 
 
@@ -41,8 +50,11 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_clear(args: argparse.Namespace) -> int:
     file = paths.prompt_file()
-    if file.exists():
-        file.write_text("", encoding="utf-8")
+    keep = archive.resolve_archive_keep(args.keep)
+    archived_to = archive.archive_and_clear(file, keep=keep, archive=not args.no_archive)
+
+    if archived_to is not None:
+        print(f"Archived previous draft to {archived_to}", file=sys.stderr)
     print(f"Cleared {file}", file=sys.stderr)
     return 0
 
@@ -77,6 +89,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the user's init.lua entirely (-u NONE) for faster startup",
     )
+    edit_parser.add_argument(
+        "--clear-key",
+        default=DEFAULT_CLEAR_KEY,
+        help=f"Buffer-local normal-mode keymap that archives and clears (default: {DEFAULT_CLEAR_KEY})",
+    )
+    edit_parser.add_argument(
+        "--no-clear-key",
+        action="store_true",
+        help="Don't register the in-editor clear keymap at all",
+    )
     edit_parser.set_defaults(func=cmd_edit)
 
     where_parser = subparsers.add_parser(
@@ -90,7 +112,21 @@ def build_parser() -> argparse.ArgumentParser:
     show_parser.set_defaults(func=cmd_show)
 
     clear_parser = subparsers.add_parser(
-        "clear", help="Empty the scratch prompt file"
+        "clear", help="Archive the current draft, then empty the scratch prompt file"
+    )
+    clear_parser.add_argument(
+        "--keep",
+        type=int,
+        default=None,
+        help=(
+            f"How many archived drafts to retain (default: {archive.DEFAULT_ARCHIVE_KEEP}, "
+            f"or ${archive.KEEP_ENV_VAR})"
+        ),
+    )
+    clear_parser.add_argument(
+        "--no-archive",
+        action="store_true",
+        help="Discard the current draft instead of archiving it first (e.g. it contained a secret)",
     )
     clear_parser.set_defaults(func=cmd_clear)
 
@@ -107,6 +143,8 @@ def main(argv: list[str] | None = None) -> None:
         args.debounce = DEFAULT_DEBOUNCE_MS
         args.nvim_bin = "nvim"
         args.clean = False
+        args.clear_key = DEFAULT_CLEAR_KEY
+        args.no_clear_key = False
         args.func = cmd_edit
 
     sys.exit(args.func(args))

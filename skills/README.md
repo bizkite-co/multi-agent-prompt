@@ -1,6 +1,6 @@
 # Multi-Agent Prompt portable skill
 
-One skill (`prompt`) that teaches a host to read `.map/prompt.md` — the
+One skill (`prompt`) that teaches a host to read `.ma/prompt/current.md` — the
 scratch file `map` edits — and treat its content as the user's next message
 when they type `/prompt`.
 
@@ -34,6 +34,6 @@ cp -a skills/prompt .agents/skills/
 ### Other hosts (Cursor, Copilot, Grok, OpenCode)
 
 Copy `skills/prompt` into that host's skills location. If the host doesn't
-support skills at all, `@prompt.md` / `@.map/prompt.md` (file mention) works
+support skills at all, `@prompt.md` / `@.ma/prompt/current.md` (file mention) works
 anywhere the host can see the file — including gitignored files, in most
 hosts.

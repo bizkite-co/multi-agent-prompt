@@ -32,35 +32,87 @@ tmux: `<prefix> "`) in the **same working directory**, then run:
 map
 ```
 
-This opens `.map/prompt.md` — resolved to the current project's git root, so
-every pane in the same repo shares one scratch file — in your actual `nvim`,
-your actual `init.lua`, your actual keymaps and plugins. No config import
-step, no reimplemented Vim subset: it's just Neovim. A buffer-local autocmd
-(scoped only to this one buffer — it never touches how you edit anything
-else) autosaves ~2 seconds after you stop typing, and immediately when you
-switch away from the pane (`FocusLost`/`BufLeave`), so the save always beats
-you to the chat window.
+This opens `.ma/prompt/current.md` — resolved to the current project's git
+root, so every pane in the same repo shares one scratch file — in your actual
+`nvim`, your actual `init.lua`, your actual keymaps and plugins. No config
+import step, no reimplemented Vim subset: it's just Neovim. A buffer-local
+autocmd (scoped only to this one buffer — it never touches how you edit
+anything else) autosaves ~2 seconds after you stop typing, and immediately
+when you switch away from the pane (`FocusLost`/`BufLeave`), so the save
+always beats you to the chat window.
 
 When you're done, switch back to the agent pane and either:
 
 - Type `/prompt` (if the agent's install includes the skill — see below), or
-- Reference `@prompt.md` / `@.map/prompt.md` directly, if your agent supports
-  file mentions and can see gitignored files.
+- Reference `@prompt.md` / `@.ma/prompt/current.md` directly, if your agent
+  supports file mentions and can see gitignored files.
+
+Done with a draft? A buffer-local keymap — `<leader>pc` by default — archives
+it and clears the buffer, without leaving normal Vim editing (or your global
+keymaps) touched in any other buffer:
 
 ```
 map            # open the scratch file (same as `map edit`)
 map where      # print the resolved file path
 map show       # print its current content to stdout
-map clear      # empty it
+map clear      # archive the current draft, then empty it
 map --clean    # skip your init.lua entirely (-u NONE) for faster startup
 ```
+
+```
+map edit --clear-key '<F5>'   # rebind the in-editor clear key
+map edit --no-clear-key       # don't register it at all
+map clear --keep 10           # override how many archived drafts to retain
+map clear --no-archive        # discard instead of archiving (e.g. it had a secret in it)
+```
+
+### The archive
+
+`map clear` — from the CLI or the in-editor keymap, which shells out to the
+same command — never actually discards a non-empty draft; it moves it to
+`.ma/prompt/archive/<timestamp>.md` first, then prunes that archive down to
+the most recent entries. Pruning is by **count**, not age (`--keep` /
+`MAP_ARCHIVE_KEEP` env var, default **5**) — simpler to reason about than a
+retention window, and it doesn't depend on the clock. Use `--no-archive` for
+the one case that shouldn't be kept anywhere: you pasted a secret and want it
+actually gone.
+
+## Performance
+
+A `map` session opens your *entire* Neovim config, which is exactly the
+point — but if that config is large, startup isn't free. Two things worth
+knowing, from actually measuring it (not guessing):
+
+- **It's not a one-time thing.** Whatever makes your first `map` slow will
+  make every subsequent one about equally slow, unless something changes
+  (lazy.nvim itself finishes installing/compiling once; LSP servers and
+  large plugin trees generally don't get meaningfully faster after that).
+- **On WSL specifically, check for `vim.opt.clipboard = 'unnamedplus'` (or
+  similar) in your own init.lua.** Setting that option makes Neovim probe for
+  a clipboard provider immediately, and on WSL that probe walks every `PATH`
+  entry checking `executable()` — including everything under `/mnt/c/...`,
+  which is slow cross-filesystem interop. Measured on this project's own dev
+  machine: ~900ms startup with that line in play, ~160ms with the Windows
+  `PATH` entries stripped, ~4ms with `-u NONE`. That's not multi-agent-prompt
+  overhead; it's one line in a personal init.lua interacting badly with WSL,
+  and fixing it (or guarding it — see `MAP_SESSION` below) speeds up *every*
+  Neovim session, not just `map`.
+- **`map --clean` (`-u NONE`)** sidesteps all of it by skipping your config
+  entirely — the built-in fast path when you don't need your plugins for a
+  quick edit.
+- **`MAP_SESSION=1`** is set in the environment of every nvim `map` launches.
+  Nothing in this package reads it — it's there so you can guard an
+  expensive line in your *own* init.lua behind
+  `if not vim.env.MAP_SESSION then ... end`, if you want full-config speed
+  back without giving up faster `map` startup. That's your config to edit,
+  not something this tool does for you.
 
 ## Agent integration
 
 `skills/prompt/` is a portable [Agent Skill](https://code.claude.com/docs/en/skills)
-that teaches a host to read `.map/prompt.md` and treat its content as the
-user's message when they type `/prompt`. See [`skills/README.md`](./skills/README.md)
-for install paths.
+that teaches a host to read `.ma/prompt/current.md` and treat its content as
+the user's message when they type `/prompt`. See
+[`skills/README.md`](./skills/README.md) for install paths.
 
 ## Why not tmux `send-keys` / auto-injection?
 
@@ -71,15 +123,25 @@ way to identify *which* pane is running the agent, which varies by terminal
 `xdotool`/`wtype` all solve a different half of that problem). The manual
 handoff above works everywhere today; auto-injection is being explored as a
 follow-up, potentially building on [`multi-agent-registry`](https://github.com/InTEGr8or/multi-agent-registry)'s
-chat discovery to identify a live agent session in the same directory.
+chat discovery to identify a live agent session (not just a recent one) in
+the same directory.
 
 ## Design notes
 
-- **The prompt file is per-project, not global.** `.map/prompt.md` resolves
-  against the nearest `.git` root, so working on two projects in two
+- **The prompt file is per-project, not global.** `.ma/prompt/current.md`
+  resolves against the nearest `.git` root, so working on two projects in two
   terminal tabs never mixes up their scratch files.
+- **`.ma/` is a shared root, not this tool's alone.** It's the umbrella
+  directory for the whole multi-agent-* line (`map`'s CLI alias is the shared
+  `ma` prefix of `map`/`mar`/`maa`) — one dotfolder instead of one per
+  product. Only `.ma/prompt/` is this tool's; a sibling product could use
+  `.ma/registry/`, etc., without colliding. Note that `task-agent`'s existing
+  `.task-agent/` convention predates this and stays as-is — migrating an
+  already-shipped tool's config layout is a separate, larger decision.
 - **`.gitignore` is managed for you.** The first time `map edit` runs in a
-  git repo, it appends `.map/` to `.gitignore` if it isn't already covered.
-- **Nothing is cleared automatically.** The whole point is not losing work —
-  reading the file (via the skill, or `@prompt.md`) never deletes it. Use
-  `map clear` when you're actually done with it.
+  git repo, it appends `.ma/prompt/` to `.gitignore` if it isn't already
+  covered — including by a broader pre-existing `.ma/` entry.
+- **Nothing is cleared automatically, and clearing doesn't discard.** Reading
+  the file (via the skill, or `@prompt.md`) never deletes it, and `map clear`
+  archives before it empties. `--no-archive` is the explicit opt-out for
+  content that shouldn't be kept anywhere at all.

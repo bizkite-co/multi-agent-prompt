@@ -1,20 +1,43 @@
-"""Resolve where a project's scratch prompt file lives.
+"""Resolve where a project's scratch prompt file (and its archive) live.
 
-The prompt file is stored per-project so a Windows Terminal / tmux / any
-other split pane opened in the same working directory as the agent chat
-naturally lands on the same file. Resolution walks up from the start
-directory to the nearest ``.git`` root (matching how most agent CLIs and
-task-agent itself scope their own config), falling back to the start
-directory itself when no repo is found.
+State lives under ``.ma/prompt/`` — ``.ma`` is the shared root directory for
+the whole multi-agent-* product line (``map``'s CLI alias is itself the
+shared ``ma`` prefix of ``map``/``mar``/``maa``), with each product getting
+its own subdirectory so a project never accumulates a `.map/`, `.mar/`,
+`.maa/`... pile of top-level dotfolders. Only this tool's own subdirectory
+(``.ma/prompt/``) is touched here; task-agent's separate, already-shipped
+``.task-agent/`` convention is out of scope for this rename.
+
+Resolution walks up from the start directory to the nearest ``.git`` root
+(matching how most agent CLIs and task-agent itself scope their own config),
+falling back to the start directory itself when no repo is found.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-PROMPT_DIRNAME = ".map"
-PROMPT_FILENAME = "prompt.md"
-GITIGNORE_PATTERN = f"{PROMPT_DIRNAME}/"
+MA_DIRNAME = ".ma"
+PRODUCT_DIRNAME = "prompt"
+PROMPT_FILENAME = "current.md"
+ARCHIVE_DIRNAME = "archive"
+
+# Anything that already covers `.ma/prompt/` — including a broader existing
+# `.ma/` entry a future sibling product's setup might have added — counts as
+# "already ignored".
+_COVERING_GITIGNORE_LINES = frozenset(
+    {
+        f"{MA_DIRNAME}/{PRODUCT_DIRNAME}/",
+        f"{MA_DIRNAME}/{PRODUCT_DIRNAME}",
+        f"/{MA_DIRNAME}/{PRODUCT_DIRNAME}/",
+        f"/{MA_DIRNAME}/{PRODUCT_DIRNAME}",
+        f"{MA_DIRNAME}/",
+        MA_DIRNAME,
+        f"/{MA_DIRNAME}/",
+        f"/{MA_DIRNAME}",
+    }
+)
+GITIGNORE_PATTERN = f"{MA_DIRNAME}/{PRODUCT_DIRNAME}/"
 
 
 def find_repo_root(start: Path) -> Path:
@@ -34,9 +57,9 @@ def find_repo_root(start: Path) -> Path:
 
 
 def prompt_dir(start: Path | None = None) -> Path:
-    """The ``.map`` directory for the project containing ``start`` (default cwd)."""
+    """The ``.ma/prompt`` directory for the project containing ``start`` (default cwd)."""
     root = find_repo_root(start or Path.cwd())
-    return root / PROMPT_DIRNAME
+    return root / MA_DIRNAME / PRODUCT_DIRNAME
 
 
 def prompt_file(start: Path | None = None) -> Path:
@@ -44,12 +67,18 @@ def prompt_file(start: Path | None = None) -> Path:
     return prompt_dir(start) / PROMPT_FILENAME
 
 
+def archive_dir(start: Path | None = None) -> Path:
+    """Where previously-cleared drafts for this project are kept."""
+    return prompt_dir(start) / ARCHIVE_DIRNAME
+
+
 def ensure_gitignored(start: Path | None = None) -> bool:
-    """Append ``.map/`` to the project's ``.gitignore`` if not already present.
+    """Append ``.ma/prompt/`` to the project's ``.gitignore`` if not already covered.
 
     No-ops (returns False) when the project has no ``.git`` directory at all
-    (nothing to ignore against) or the pattern is already covered. Returns
-    True when it actually modified (or created) ``.gitignore``.
+    (nothing to ignore against), or an existing line already covers it —
+    either the exact pattern or a broader ``.ma/`` entry. Returns True when
+    it actually modified (or created) ``.gitignore``.
     """
     root = find_repo_root(start or Path.cwd())
     if not (root / ".git").exists():
@@ -60,8 +89,7 @@ def ensure_gitignored(start: Path | None = None) -> bool:
     lines = existing.splitlines()
 
     for line in lines:
-        stripped = line.strip()
-        if stripped in (GITIGNORE_PATTERN, PROMPT_DIRNAME, f"/{PROMPT_DIRNAME}", f"/{GITIGNORE_PATTERN}"):
+        if line.strip() in _COVERING_GITIGNORE_LINES:
             return False
 
     with gitignore.open("a", encoding="utf-8") as f:

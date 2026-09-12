@@ -6,4 +6,12 @@ dist/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-.map/
+.ma/prompt/
+
+# task-agent auto-registers any git repo it finds under ~/repos/ as one of
+# its own task stores — unrelated to this project, not ours to track.
+# docs/tasks is a symlink it manages, pointing at a machine-specific
+# absolute path — must never be committed as a real symlink.
+.env
+.ta-config.json
+docs/tasks
