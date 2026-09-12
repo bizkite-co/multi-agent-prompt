@@ -35,11 +35,13 @@ map
 This opens `.ma/prompt/current.md` — resolved to the current project's git
 root, so every pane in the same repo shares one scratch file — in your actual
 `nvim`, your actual `init.lua`, your actual keymaps and plugins. No config
-import step, no reimplemented Vim subset: it's just Neovim. A buffer-local
-autocmd (scoped only to this one buffer — it never touches how you edit
-anything else) autosaves ~2 seconds after you stop typing, and immediately
-when you switch away from the pane (`FocusLost`/`BufLeave`), so the save
-always beats you to the chat window.
+import step, no reimplemented Vim subset: it's just Neovim. You land in
+**insert mode already**, cursor at the end of the buffer, so there's no `i`
+to press before you start typing (`--no-insert` if you'd rather open in
+normal mode). A buffer-local autocmd (scoped only to this one buffer — it
+never touches how you edit anything else) autosaves ~2 seconds after you stop
+typing, and immediately when you switch away from the pane
+(`FocusLost`/`BufLeave`), so the save always beats you to the chat window.
 
 When you're done, switch back to the agent pane and either:
 
@@ -62,6 +64,7 @@ map --clean    # skip your init.lua entirely (-u NONE) for faster startup
 ```
 map edit --clear-key '<F5>'   # rebind the in-editor clear key
 map edit --no-clear-key       # don't register it at all
+map edit --no-insert          # open in normal mode instead of insert mode
 map clear --keep 10           # override how many archived drafts to retain
 map clear --no-archive        # discard instead of archiving (e.g. it had a secret in it)
 ```
@@ -106,6 +109,13 @@ knowing, from actually measuring it (not guessing):
   `if not vim.env.MAP_SESSION then ... end`, if you want full-config speed
   back without giving up faster `map` startup. That's your config to edit,
   not something this tool does for you.
+- **It's specifically a startup cost, not a per-save one.** The clipboard
+  probe runs once, while your init.lua is sourced, not again on autosave, on
+  `FocusLost`, or when you switch panes and type `/prompt` — that last step
+  never touches nvim at all (`map show`/reading the file is a separate,
+  plain filesystem read). If a session still feels slow at the hand-off
+  moment specifically, that's terminal pane-switching or the agent's own
+  slash-command overhead, not this tool or Neovim.
 
 ## Agent integration
 
@@ -125,6 +135,12 @@ handoff above works everywhere today; auto-injection is being explored as a
 follow-up, potentially building on [`multi-agent-registry`](https://github.com/InTEGr8or/multi-agent-registry)'s
 chat discovery to identify a live agent session (not just a recent one) in
 the same directory.
+
+If/when that lands: prefer sending a widely-supported "submit" keystroke —
+`Ctrl+Enter` is the closest thing to a universal convention across chat
+input boxes — into the target pane after typing `/prompt`, over anything
+input-method-specific, so the same injection code has a chance of working
+across agents rather than being re-tuned per host.
 
 ## Design notes
 

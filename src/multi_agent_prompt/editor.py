@@ -82,6 +82,7 @@ def build_nvim_command(
     nvim_bin: str = DEFAULT_NVIM_BIN,
     clean: bool = False,
     clear_key: str | None = DEFAULT_CLEAR_KEY,
+    insert: bool = True,
 ) -> list[str]:
     """The argv to launch nvim on ``file`` with autosave (and the clear keymap) enabled.
 
@@ -89,13 +90,20 @@ def build_nvim_command(
     plugin it loads) entirely — a fast, minimal mode for when startup latency
     from a large distro (LSP servers, treesitter, etc.) matters more than
     having every keymap and plugin available for a quick one-file edit.
+
+    ``insert=True`` (default) drops straight into append-mode insert at the
+    end of the buffer — a scratch prompt file is written far more than it's
+    navigated, so requiring an `i`/`a`/`o` before typing is pure friction.
     """
     lua = build_autosave_lua(debounce_ms, clear_key=clear_key)
     argv = [nvim_bin]
     if clean:
         argv.append("-u")
         argv.append("NONE")
-    argv += ["-c", f"lua {lua}", str(file)]
+    argv += ["-c", f"lua {lua}"]
+    if insert:
+        argv += ["-c", "normal! G", "-c", "startinsert!"]
+    argv += [str(file)]
     return argv
 
 
@@ -109,13 +117,19 @@ def open_editor(
     nvim_bin: str = DEFAULT_NVIM_BIN,
     clean: bool = False,
     clear_key: str | None = DEFAULT_CLEAR_KEY,
+    insert: bool = True,
 ) -> int:
     """Open ``file`` in nvim (inheriting the terminal) with autosave. Returns nvim's exit code."""
     file.parent.mkdir(parents=True, exist_ok=True)
     if not file.exists():
         file.touch()
     argv = build_nvim_command(
-        file, debounce_ms=debounce_ms, nvim_bin=nvim_bin, clean=clean, clear_key=clear_key
+        file,
+        debounce_ms=debounce_ms,
+        nvim_bin=nvim_bin,
+        clean=clean,
+        clear_key=clear_key,
+        insert=insert,
     )
     env = {**os.environ, "MAP_SESSION": "1"}
     result = subprocess.run(argv, check=False, env=env)

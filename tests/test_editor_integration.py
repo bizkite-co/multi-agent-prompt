@@ -5,12 +5,15 @@ init.lua) purely for test speed/determinism — this does not exercise
 --clean, it's just how the harness gets a fast, isolated nvim.
 """
 
+import os
+import pty
 import shutil
 import subprocess
+import time
 
 import pytest
 
-from multi_agent_prompt.editor import build_autosave_lua
+from multi_agent_prompt.editor import build_autosave_lua, build_nvim_command
 
 pytestmark = pytest.mark.skipif(
     shutil.which("nvim") is None, reason="nvim not installed"
@@ -134,3 +137,34 @@ def test_clear_keymap_archives_and_empties_via_real_map_clear(tmp_path):
     archived = list((prompt_dir / "archive").glob("*.md"))
     assert len(archived) == 1
     assert archived[0].read_text().strip() == "a draft worth keeping"
+
+
+def test_insert_mode_on_open_lets_you_type_without_pressing_i(tmp_path):
+    """`--headless` disables real UI attachment, and startinsert! (like
+    TextChanged above) depends on it — so unlike the other tests here, this
+    one needs a real pseudo-terminal to mean anything. Without insert mode,
+    the plain characters below would be interpreted as Normal-mode commands
+    instead of typed into the buffer.
+    """
+    file = tmp_path / "current.md"
+    file.write_text("")
+
+    argv = build_nvim_command(file, clean=True)  # includes -u NONE already
+
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave)
+    os.close(slave)
+    try:
+        time.sleep(0.5)  # let nvim actually start and the UI attach
+        os.write(master, b"typed without pressing i first")
+        time.sleep(0.3)
+        os.write(master, b"\x1b")  # Esc
+        time.sleep(0.2)
+        os.write(master, b":wq!\r")
+        proc.wait(timeout=10)
+    finally:
+        os.close(master)
+        if proc.poll() is None:
+            proc.kill()
+
+    assert file.read_text().strip() == "typed without pressing i first"

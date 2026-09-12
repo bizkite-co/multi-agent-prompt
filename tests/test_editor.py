@@ -71,6 +71,25 @@ def test_build_nvim_command_basic(tmp_path):
     assert "-c" in argv
 
 
+def test_build_nvim_command_starts_in_insert_mode_by_default(tmp_path):
+    file = tmp_path / "current.md"
+
+    argv = build_nvim_command(file)
+
+    assert "startinsert!" in argv
+    # File path must still come last regardless of how many -c flags precede it.
+    assert argv[-1] == str(file)
+
+
+def test_build_nvim_command_no_insert_stays_in_normal_mode(tmp_path):
+    file = tmp_path / "current.md"
+
+    argv = build_nvim_command(file, insert=False)
+
+    assert "startinsert!" not in argv
+    assert "normal! G" not in argv
+
+
 def test_build_nvim_command_clean_mode_adds_u_none(tmp_path):
     file = tmp_path / "current.md"
 

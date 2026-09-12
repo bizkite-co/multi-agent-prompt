@@ -32,6 +32,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         nvim_bin=args.nvim_bin,
         clean=args.clean,
         clear_key=None if args.no_clear_key else args.clear_key,
+        insert=not args.no_insert,
     )
 
 
@@ -99,6 +100,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Don't register the in-editor clear keymap at all",
     )
+    edit_parser.add_argument(
+        "--no-insert",
+        action="store_true",
+        help="Open in normal mode instead of dropping straight into insert mode",
+    )
     edit_parser.set_defaults(func=cmd_edit)
 
     where_parser = subparsers.add_parser(
@@ -145,6 +151,7 @@ def main(argv: list[str] | None = None) -> None:
         args.clean = False
         args.clear_key = DEFAULT_CLEAR_KEY
         args.no_clear_key = False
+        args.no_insert = False
         args.func = cmd_edit
 
     sys.exit(args.func(args))
