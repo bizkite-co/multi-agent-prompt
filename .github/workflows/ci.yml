@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      # https://github.com/actions/checkout
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # The autosave/keymap/fold-on-paste integration tests drive a real
+      # Neovim (headless, and over a pseudo-terminal for anything that needs
+      # actual UI attachment — TextChanged and startinsert! don't fire
+      # without one). They skip gracefully if nvim is missing, but that
+      # would silently stop covering the thing this project mostly is.
+      - name: Install Neovim
+        run: sudo apt-get update && sudo apt-get install -y neovim
+
+      # https://github.com/astral-sh/setup-uv
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Run ruff
+        run: uv run ruff check .
+
+      - name: Run mypy
+        run: uv run mypy src
+
+      - name: Run pytest
+        run: uv run pytest

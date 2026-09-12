@@ -3,6 +3,9 @@ from __future__ import annotations
 import argparse
 import sys
 
+import verkit
+from rich.console import Console
+
 from multi_agent_prompt import archive, paths
 from multi_agent_prompt.editor import (
     DEFAULT_CLEAR_KEY,
@@ -13,6 +16,8 @@ from multi_agent_prompt.editor import (
     nvim_available,
     open_editor,
 )
+
+PACKAGE_NAME = "multi-agent-prompt"
 
 
 def cmd_edit(args: argparse.Namespace) -> int:
@@ -81,6 +86,42 @@ def cmd_pop(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_version(args: argparse.Namespace) -> int:
+    """Show version, promote it, tag it, or run a full release — via verkit.
+
+    Mirrors task-agent's `ta version` surface (verkit is the shared
+    version-management library across this developer's projects): bare
+    `map version` shows installed vs. latest-on-PyPI; `promote` bumps
+    semver and commits; `tag` tags HEAD from the committed version and
+    pushes; `release` does both atomically.
+    """
+    console = Console()
+    verkit.display_version_info(console, PACKAGE_NAME)
+
+    try:
+        if args.version_command == "release":
+            new_v = verkit.promote_version(args.part, console=console)
+            console.print(f"[blue]Release {new_v}: tagging and pushing...[/blue]")
+            verkit.tag_version(console=console, push=args.push, push_branch=args.push_branch)
+            console.print(f"[bold green]Release v{new_v} complete.[/bold green]")
+        elif args.version_command == "promote":
+            new_v = verkit.promote_version(args.part, console=console)
+            console.print(
+                "[dim]Next: map version tag[/dim]  "
+                "[dim](or use map version release for one-shot)[/dim]"
+            )
+            console.print(f"[dim]HEAD is now v{new_v}; tag when ready to publish.[/dim]")
+        elif args.version_command == "tag":
+            verkit.tag_version(console=console, push=args.push, push_branch=args.push_branch)
+    except SystemExit:
+        raise
+    except Exception as e:  # noqa: BLE001 - deliberate top-level boundary for verkit's git/subprocess errors
+        console.print(f"[red]Error during version operation: {e}[/red]")
+        return 1
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="map",
@@ -89,6 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Compose in your real Neovim in a split pane; hand off to the chat "
             "with /prompt or @prompt.md."
         ),
+    )
+    parser.add_argument(
+        "-V", "--version", action="store_true", help="Show version and exit"
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -217,12 +261,58 @@ def build_parser() -> argparse.ArgumentParser:
     )
     clear_parser.set_defaults(func=cmd_clear)
 
+    version_parser = subparsers.add_parser(
+        "version", help="Show version, promote, tag, or run a full release"
+    )
+    v_sub = version_parser.add_subparsers(dest="version_command")
+    promote_parser = v_sub.add_parser(
+        "promote",
+        help=(
+            "Bump semver and commit it (amends only if HEAD is unpushed/untagged; "
+            "otherwise creates chore(release): vX.Y.Z)"
+        ),
+    )
+    promote_parser.add_argument("part", choices=["major", "minor", "patch"])
+    version_tag_parser = v_sub.add_parser(
+        "tag",
+        help="Tag HEAD as vX.Y.Z from committed version; push branch then tag",
+    )
+    version_tag_parser.add_argument(
+        "--no-push",
+        dest="push",
+        action="store_false",
+        help="Create the local tag only (do not push branch or tag)",
+    )
+    version_tag_parser.add_argument(
+        "--no-push-branch",
+        dest="push_branch",
+        action="store_false",
+        help="When pushing, push only the tag (not the branch)",
+    )
+    version_tag_parser.set_defaults(push=True, push_branch=True)
+    version_release_parser = v_sub.add_parser(
+        "release", help="Atomic promote + tag + push branch + push tag"
+    )
+    version_release_parser.add_argument("part", choices=["major", "minor", "patch"])
+    version_release_parser.add_argument(
+        "--no-push",
+        dest="push",
+        action="store_false",
+        help="Promote and tag locally only",
+    )
+    version_release_parser.set_defaults(push=True, push_branch=True)
+    version_parser.set_defaults(func=cmd_version)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.version:
+        verkit.display_version_info(Console(), PACKAGE_NAME)
+        sys.exit(0)
 
     if args.command is None:
         # Bare `map` == `map edit` with defaults.

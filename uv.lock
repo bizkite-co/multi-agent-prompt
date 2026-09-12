@@ -215,6 +215,7 @@ name = "multi-agent-prompt"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "rich" },
     { name = "verkit" },
 ]
 
@@ -226,7 +227,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "verkit", specifier = ">=0.1.4" }]
+requires-dist = [
+    { name = "rich", specifier = ">=13.9.4" },
+    { name = "verkit", specifier = ">=0.1.4" },
+]
 
 [package.metadata.requires-dev]
 dev = [
