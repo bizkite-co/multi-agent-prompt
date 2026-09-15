@@ -25,6 +25,12 @@ mkdir -p ~/.claude/skills
 cp -a skills/prompt ~/.claude/skills/
 ```
 
+For Claude Code specifically, prefer the zero-overhead variant instead: its
+skills support ``!`cmd` `` dynamic context injection, so
+[`commands/claude/prompt.md`](../commands/README.md#claude-code) splices the
+draft in before the model sees anything. This portable skill remains the
+fallback for every host without injection.
+
 ### Antigravity CLI (`agy`)
 
 ```bash
@@ -32,7 +38,17 @@ mkdir -p .agents/skills
 cp -a skills/prompt .agents/skills/
 ```
 
-### Other hosts (Cursor, Copilot, Grok, OpenCode)
+### OpenCode
+
+OpenCode discovers skills from `.opencode/skills/` (project) or
+`~/.config/opencode/skills/` (global), including the Claude-compatible paths
+above. But for typed `/prompt`, prefer the native command instead — the
+harness itself runs `map pop` at send time and splices the draft into the
+message, zero LLM round trips. See
+[`commands/README.md`](../commands/README.md); keep the skill installed
+alongside it for natural-language asks.
+
+### Other hosts (Cursor, Copilot, Grok)
 
 Copy `skills/prompt` into that host's skills location. If the host doesn't
 support skills at all, `@prompt.md` / `@.ma/prompt/current.md` (file mention)

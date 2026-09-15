@@ -46,8 +46,9 @@ typing, and immediately when you switch away from the pane
 
 When you're done, switch back to the agent pane and either:
 
-- Type `/prompt` (if the agent's install includes the skill — see below) —
-  reads the draft, archives it, and clears the file, all in one step, or
+- Type `/prompt` (if the agent's install includes the skill or command —
+  see below) — reads the draft, archives it, and clears the file, all in one
+  step, or
 - Reference `@prompt.md` / `@.ma/prompt/current.md` directly, if your agent
   supports file mentions and can see gitignored files — this is a plain
   read, so unlike `/prompt` it doesn't archive or clear anything.
@@ -171,6 +172,17 @@ knowing, from actually measuring it (not guessing):
 that teaches a host to read `.ma/prompt/current.md` and treat its content as
 the user's message when they type `/prompt`. See
 [`skills/README.md`](./skills/README.md) for install paths.
+
+Hosts that can run shell commands while *building* the prompt get a cheaper
+path: a native command file whose template runs `map pop` at send time and
+splices the draft into the message itself — zero LLM tool calls, no skill
+body in context, and the draft is archived (and the file cleared) even if
+the session dies before the model replies. OpenCode and Claude Code ship
+one today ([`commands/opencode/`](./commands/opencode/) and
+[`commands/claude/`](./commands/claude/)); see
+[`commands/README.md`](./commands/README.md). The skill stays installed
+alongside it for natural-language asks ("read my prompt file") and for hosts
+without command support.
 
 ## Why not tmux `send-keys` / auto-injection?
 
