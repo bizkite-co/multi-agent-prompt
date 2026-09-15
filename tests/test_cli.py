@@ -196,3 +196,32 @@ def test_bare_invocation_defaults_to_edit(monkeypatch):
     args = parser.parse_args([])
 
     assert args.command is None  # main() fills this in as "edit"
+
+
+def test_cmd_edit_forwards_ui_flags_to_open_editor(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr("multi_agent_prompt.cli.nvim_available", lambda _bin: True)
+
+    captured = {}
+
+    def fake_open_editor(_file, **kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("multi_agent_prompt.cli.open_editor", fake_open_editor)
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["edit", "--no-prompt-gutter", "--no-footer"])
+    assert args.func(args) == 0
+    assert captured["prompt_gutter"] is False
+    assert captured["footer_keymaps"] is False
+    assert captured["trueblack_bg"] is True
+
+    captured.clear()
+    args = parser.parse_args(["edit", "--no-trueblack"])
+    assert args.func(args) == 0
+    assert captured["prompt_gutter"] is True
+    assert captured["footer_keymaps"] is True
+    assert captured["trueblack_bg"] is False

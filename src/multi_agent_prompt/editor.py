@@ -37,6 +37,12 @@ session; see fold-on-paste.
     within this same throwaway session (e.g. one opened via the history
     keymap), which is fine here since every buffer in this session is
     another scratch markdown file.
+  * A small UI layer (``build_ui_lua``), also session-scoped and so isolated
+    from the user's own nvim: a prompt-editor gutter (line numbers off, a
+    ``> `` prompt marker following the cursor in the sign column), a
+    statusline footer listing whichever keymaps are active this session, and
+    a forced ``#000000`` background that keeps the user's colorscheme fg.
+    Degrades silently on any API mismatch rather than aborting the session.
 
 The launched nvim gets ``MAP_SESSION=1`` in its environment — nothing in
 this package reads it, but it's there for a user who wants to guard an
@@ -50,6 +56,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 
 from multi_agent_prompt.paths import ARCHIVE_DIRNAME
@@ -60,6 +67,9 @@ DEFAULT_CLEAR_KEY = "<leader>pc"
 DEFAULT_HISTORY_KEY = "<leader>ph"
 DEFAULT_HELP_KEY = "g?"
 DEFAULT_FOLD_THRESHOLD = 6
+DEFAULT_PROMPT_GUTTER = True
+DEFAULT_FOOTER_KEYMAPS = True
+DEFAULT_TRUEBLACK_BG = True
 
 
 def build_autosave_lua(
@@ -238,6 +248,145 @@ end, {{ buffer = 0, desc = "multi-agent-prompt: show keymap help" }})
     return lua
 
 
+_GUTTER_LUA = """
+vim.opt.number = false
+vim.opt.relativenumber = false
+vim.opt.signcolumn = "yes"
+local map_gutter_ns = vim.api.nvim_create_namespace("map-gutter")
+local map_gutter_id
+local function map_place_gutter()
+  if map_gutter_id then
+    pcall(vim.api.nvim_buf_del_extmark, 0, map_gutter_ns, map_gutter_id)
+  end
+  local count = vim.api.nvim_buf_line_count(0)
+  if count == 0 then
+    return
+  end
+  -- vim.fn.line('.') (not nvim_win_get_cursor) so this also works headless;
+  -- headless cursors can report 0-based/0 rows, so clamp to [0, count-1].
+  local line = math.max(0, math.min(vim.fn.line(".") - 1, count - 1))
+  map_gutter_id = vim.api.nvim_buf_set_extmark(0, map_gutter_ns, line, 0, {
+    sign_text = "> ",
+    hl_group = "CursorLineNr",
+    priority = 200,
+  })
+end
+vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI", "TextChanged", "TextChangedI"}, {
+  buffer = 0,
+  callback = map_place_gutter,
+  desc = "multi-agent-prompt: prompt-marker gutter",
+})
+map_place_gutter()
+""".strip()
+
+#: Highlight groups flattened to a #000000 background (foregrounds kept).
+_TRUEBLACK_GROUPS = (
+    "Normal",
+    "NormalFloat",
+    "EndOfBuffer",
+    "SignColumn",
+    "FoldColumn",
+    "LineNr",
+    "CursorLineNr",
+    "StatusLine",
+    "StatusLineNC",
+    "WinSeparator",
+    "MsgArea",
+    "Pmenu",
+    "PmenuSel",
+    "PmenuSbar",
+    "PmenuThumb",
+    "CursorLine",
+    "ColorColumn",
+    "QuickFixLine",
+)
+
+#: Lua body for the trueblack background; group list shared with _TRUEBLACK_GROUPS.
+_TRUEBLACK_LUA = f"""
+vim.opt.background = "dark"
+local map_bg_groups = {{{"".join(f'"{g}", ' for g in _TRUEBLACK_GROUPS)}}}
+local function map_trueblack(name)
+  local ok, cur = pcall(vim.api.nvim_get_hl, 0, {{ name = name }})
+  if not ok or not cur or vim.tbl_isempty(cur) then
+    return
+  end
+  local hl = {{ bg = "#000000" }}
+  if cur.fg then
+    hl.fg = cur.fg
+  end
+  vim.api.nvim_set_hl(0, name, hl)
+end
+for _, g in ipairs(map_bg_groups) do
+  map_trueblack(g)
+end
+""".strip()
+
+
+def build_ui_lua(
+    *,
+    prompt_gutter: bool = True,
+    footer_keymaps: bool = True,
+    trueblack_bg: bool = True,
+    clear_key: str | None = DEFAULT_CLEAR_KEY,
+    history_key: str | None = DEFAULT_HISTORY_KEY,
+    history: bool = True,
+    help_key: str | None = DEFAULT_HELP_KEY,
+    fold_threshold: int | None = DEFAULT_FOLD_THRESHOLD,
+) -> str:
+    """Lua for the prompt editor's visual layer, applied to the whole session.
+
+    Unlike ``build_autosave_lua`` these are session-level (a dedicated
+    throwaway nvim process, so they can never leak into the user's normal
+    nvim), not buffer-local:
+
+      * ``prompt_gutter`` — line numbers off; a ``> `` prompt marker follows
+        the cursor in the sign column, replacing the number gutter.
+      * ``footer_keymaps`` — a statusline footer listing whichever keymaps
+        are actually active this session (built from the same key arguments
+        here, so it reflects real overrides like ``build_autosave_lua``'s
+        ``g?`` cheatsheet does).
+      * ``trueblack_bg`` — keeps the user's colorscheme foregrounds but
+        flattens every background surface to ``#000000`` to match a
+        trueblack terminal.
+
+    The whole snippet runs inside ``pcall``: any API/version mismatch (e.g.
+    a Neovim too old for ``sign_text``) degrades to a logged no-op instead
+    of aborting the session start (which would also drop autosave, since
+    this runs in the same ``-c`` as ``build_autosave_lua``).
+    """
+    body: list[str] = []
+
+    if prompt_gutter:
+        body.append(_GUTTER_LUA)
+
+    if footer_keymaps:
+        entries = []
+        if clear_key:
+            entries.append((clear_key, "archive & clear"))
+        if history and history_key:
+            entries.append((history_key, "browse history"))
+        if fold_threshold and fold_threshold > 0:
+            entries.append(("za/zo/zc", "toggle fold"))
+        if help_key:
+            entries.append((help_key, "help"))
+
+        if entries:
+            hint = " · ".join(f"{k} {d}" for k, d in entries)
+            body.append(
+                'vim.opt.laststatus = 3\n'
+                f"vim.opt.statusline = ' > map · {hint} %= %m %03l:%02c '\n"
+            )
+
+    if trueblack_bg:
+        body.append(_TRUEBLACK_LUA)
+
+    if not body:
+        return ""
+
+    inner = textwrap.indent("\n\n".join(body), "  ", predicate=lambda line: bool(line))
+    return f"pcall(function()\n{inner}\nend)\n"
+
+
 def build_nvim_command(
     file: Path,
     debounce_ms: int = DEFAULT_DEBOUNCE_MS,
@@ -248,6 +397,9 @@ def build_nvim_command(
     help_key: str | None = DEFAULT_HELP_KEY,
     fold_threshold: int | None = DEFAULT_FOLD_THRESHOLD,
     insert: bool = True,
+    prompt_gutter: bool = DEFAULT_PROMPT_GUTTER,
+    footer_keymaps: bool = DEFAULT_FOOTER_KEYMAPS,
+    trueblack_bg: bool = DEFAULT_TRUEBLACK_BG,
 ) -> list[str]:
     """The argv to launch nvim on ``file`` with autosave (and the clear/history/help/fold keymaps) enabled.
 
@@ -259,6 +411,11 @@ def build_nvim_command(
     ``insert=True`` (default) drops straight into append-mode insert at the
     end of the buffer — a scratch prompt file is written far more than it's
     navigated, so requiring an `i`/`a`/`o` before typing is pure friction.
+
+    ``prompt_gutter`` / ``footer_keymaps`` / ``trueblack_bg`` toggle the
+    prompt-editor visual layer (see ``build_ui_lua``). The buffer-scoped
+    autosave/keymap Lua always runs first; if the visual layer fails on an
+    older Neovim it is pcall-guarded, so autosave is never lost.
     """
     history_dir = file.parent / ARCHIVE_DIRNAME
     lua = build_autosave_lua(
@@ -269,6 +426,18 @@ def build_nvim_command(
         help_key=help_key,
         fold_threshold=fold_threshold,
     )
+    ui = build_ui_lua(
+        prompt_gutter=prompt_gutter,
+        footer_keymaps=footer_keymaps,
+        trueblack_bg=trueblack_bg,
+        clear_key=clear_key,
+        history_key=history_key,
+        history=history_dir is not None and history_key is not None,
+        help_key=help_key,
+        fold_threshold=fold_threshold,
+    )
+    if ui:
+        lua = lua + "\n\n" + ui
     argv = [nvim_bin]
     if clean:
         argv.append("-u")
@@ -294,6 +463,9 @@ def open_editor(
     help_key: str | None = DEFAULT_HELP_KEY,
     fold_threshold: int | None = DEFAULT_FOLD_THRESHOLD,
     insert: bool = True,
+    prompt_gutter: bool = DEFAULT_PROMPT_GUTTER,
+    footer_keymaps: bool = DEFAULT_FOOTER_KEYMAPS,
+    trueblack_bg: bool = DEFAULT_TRUEBLACK_BG,
 ) -> int:
     """Open ``file`` in nvim (inheriting the terminal) with autosave. Returns nvim's exit code."""
     file.parent.mkdir(parents=True, exist_ok=True)
@@ -309,6 +481,9 @@ def open_editor(
         help_key=help_key,
         fold_threshold=fold_threshold,
         insert=insert,
+        prompt_gutter=prompt_gutter,
+        footer_keymaps=footer_keymaps,
+        trueblack_bg=trueblack_bg,
     )
     env = {**os.environ, "MAP_SESSION": "1"}
     result = subprocess.run(argv, check=False, env=env)

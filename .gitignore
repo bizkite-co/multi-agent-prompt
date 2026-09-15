@@ -8,6 +8,12 @@ dist/
 .mypy_cache/
 .ma/prompt/
 
+# machine-local mise overrides: .mise/map-dev.sh adds this repo's editable
+# `.venv/bin` (dev `map`) to PATH; mise.local.toml references it. Other
+# machines/projects use the published PyPI version from ~/.local/bin.
+mise.local.toml
+.mise/
+
 # task-agent auto-registers any git repo it finds under ~/repos/ as one of
 # its own task stores — unrelated to this project, not ours to track.
 # docs/tasks is a symlink it manages, pointing at a machine-specific

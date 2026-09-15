@@ -332,3 +332,69 @@ def test_paste_below_threshold_is_not_folded(tmp_path):
             proc.kill()
 
     assert result_file.read_text().strip() == "-1"  # no fold: foldclosed() returns -1
+
+
+def _run_ui_headless(file, probes, timeout=10):
+    """Run the full prompt-editor session (autosave + UI layer) headless,
+    capturing one line of nvim output per probe. Returns (rc, output)."""
+    argv = build_nvim_command(file, clean=True, insert=False)
+    i = next(k for k, a in enumerate(argv) if a.startswith("lua "))
+    probe_cmds = [c for p, v in probes for c in ("-c", f"lua print('{p}='..tostring({v}))")] + ["-c", "qa!"]
+    cmd = argv[: i + 1] + probe_cmds + argv[i + 1 :]
+    result = subprocess.run(cmd, timeout=timeout, capture_output=True, text=True, check=False)
+    out = {
+        p: line.split("=", 1)[1]
+        for line in (result.stdout + result.stderr).splitlines()
+        for p, _ in probes
+        if line.startswith(f"{p}=")
+    }
+    return result.returncode, out
+
+
+def test_ui_layer_applies_prompt_gutter_footer_and_trueblack(tmp_path):
+    file = tmp_path / "current.md"
+    file.write_text("line one\nline two\n")
+
+    rc, out = _run_ui_headless(
+        file,
+        [
+            ("number_off", "vim.o.number == false"),
+            ("signcol", "vim.o.signcolumn"),
+            ("footer", "vim.o.statusline:find('> map', 1, true) ~= nil"),
+            ("bg_black", "vim.api.nvim_get_hl(0, { name = 'Normal' }).bg == 0"),
+            (
+                "marks",
+                "#vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('map-gutter'), 0, -1, {})",
+            ),
+        ],
+    )
+
+    assert rc == 0
+    assert out["number_off"] == "true"
+    assert out["signcol"] == "yes"
+    assert out["footer"] == "true"
+    assert out["bg_black"] == "true"
+    assert out["marks"] == "1"
+
+
+def test_ui_layer_can_be_turned_off(tmp_path):
+    file = tmp_path / "current.md"
+    file.write_text("line one\n")
+
+    argv = build_nvim_command(
+        file, clean=True, insert=False,
+        prompt_gutter=False, footer_keymaps=False, trueblack_bg=False,
+    )
+    i = next(k for k, a in enumerate(argv) if a.startswith("lua "))
+    cmd = (
+        argv[: i + 1]
+        + ["-c", "lua print('combined='..tostring(vim.o.statusline == '' and vim.o.signcolumn == 'auto' and vim.api.nvim_get_hl(0, { name = 'Normal' }).bg ~= 0))"]
+        + ["-c", "qa!"]
+        + argv[i + 1 :]
+    )
+
+    result = subprocess.run(cmd, timeout=10, capture_output=True, text=True, check=False)
+    assert result.returncode == 0
+    assert "combined=true" in result.stdout + result.stderr
+    # numbers are left untouched when the prompt gutter is disabled
+    assert "number" not in " ".join(argv)

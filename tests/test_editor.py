@@ -7,6 +7,7 @@ from multi_agent_prompt.editor import (
     DEFAULT_HISTORY_KEY,
     build_autosave_lua,
     build_nvim_command,
+    build_ui_lua,
     open_editor,
 )
 
@@ -255,6 +256,117 @@ def test_build_nvim_command_respects_custom_binary(tmp_path):
     argv = build_nvim_command(file, nvim_bin="/opt/nvim/bin/nvim")
 
     assert argv[0] == "/opt/nvim/bin/nvim"
+
+
+def test_build_ui_lua_is_pcall_guarded():
+    """A UI API/version mismatch must degrade to a no-op, never abort the
+    session start (which shares the same -c as the autosave Lua)."""
+    lua = build_ui_lua()
+
+    assert lua.startswith("pcall(function()")
+
+
+def test_build_ui_lua_prompt_gutter_disables_numbers_and_adds_marker():
+    lua = build_ui_lua()
+
+    assert "vim.opt.number = false" in lua
+    assert "vim.opt.relativenumber = false" in lua
+    assert 'vim.opt.signcolumn = "yes"' in lua
+    assert 'sign_text = "> "' in lua
+    for event in ("CursorMoved", "CursorMovedI", "TextChanged", "TextChangedI"):
+        assert event in lua
+
+
+def test_build_ui_lua_prompt_gutter_off_leaves_numbers_alone():
+    lua = build_ui_lua(prompt_gutter=False)
+
+    assert "vim.opt.number" not in lua
+    assert 'sign_text = "> "' not in lua
+
+
+def test_build_ui_lua_footer_lists_active_keys_by_default():
+    lua = build_ui_lua(prompt_gutter=False, trueblack_bg=False)
+
+    assert "vim.opt.laststatus = 3" in lua
+    assert "statusline" in lua
+    assert "archive & clear" in lua
+    assert "browse history" in lua
+    assert "za/zo/zc toggle fold" in lua
+    assert "help" in lua
+
+
+def test_build_ui_lua_footer_reflects_key_overrides():
+    lua = build_ui_lua(
+        prompt_gutter=False,
+        trueblack_bg=False,
+        clear_key=None,
+        history=False,
+        help_key="<F1>",
+        fold_threshold=0,
+    )
+
+    assert "archive & clear" not in lua
+    assert "browse history" not in lua
+    assert "za/zo/zc" not in lua
+    assert '"<F1> help"' in lua or "<F1> help" in lua
+    assert DEFAULT_CLEAR_KEY not in lua
+
+
+def test_build_ui_lua_footer_off_never_touches_statusline():
+    lua = build_ui_lua(footer_keymaps=False)
+
+    assert "statusline" not in lua
+    assert "laststatus" not in lua
+
+
+def test_build_ui_lua_trueblack_flattens_background_keeps_fg():
+    lua = build_ui_lua(prompt_gutter=False, footer_keymaps=False)
+
+    assert 'vim.opt.background = "dark"' in lua
+    assert 'bg = "#000000"' in lua
+    assert "if cur.fg then" in lua
+    assert "NormalFloat" in lua
+    assert "StatusLine" in lua
+
+
+def test_build_ui_lua_trueblack_off_keeps_colorscheme_background():
+    lua = build_ui_lua(trueblack_bg=False)
+
+    assert "#000000" not in lua
+    assert 'vim.opt.background' not in lua
+
+
+def test_build_ui_lua_all_disabled_is_empty():
+    lua = build_ui_lua(
+        prompt_gutter=False, footer_keymaps=False, trueblack_bg=False
+    )
+
+    assert lua == ""
+
+
+def test_build_nvim_command_layers_ui_lua_after_autosave(tmp_path):
+    file = tmp_path / "current.md"
+
+    argv = build_nvim_command(file)
+
+    joined = " ".join(argv)
+    autosave_pos = joined.index("timer:start(")
+    ui_pos = joined.index("sign_text = \"> \"")
+    assert autosave_pos < ui_pos
+
+
+def test_build_nvim_command_no_ui_flags_omit_the_visual_layer(tmp_path):
+    file = tmp_path / "current.md"
+
+    argv = build_nvim_command(
+        file, prompt_gutter=False, footer_keymaps=False, trueblack_bg=False
+    )
+
+    joined = " ".join(argv)
+    assert "sign_text" not in joined
+    assert "statusline" not in joined
+    assert "#000000" not in joined
+    assert "timer:start(" in joined  # autosave unaffected
 
 
 def test_open_editor_creates_parent_directory_before_launching(tmp_path):

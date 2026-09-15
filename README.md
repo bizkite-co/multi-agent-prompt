@@ -58,6 +58,14 @@ Pasting a long CLI transcript or diff in? Anything **6 lines or more**
 doesn't bury the rest of what you're writing — `za`/`zo`/`zc` (standard Vim)
 toggle it open.
 
+The session is also styled like a prompt editor (again, only for the
+throwaway nvim `map` launches, never your own): line numbers are off and a
+`> ` prompt marker follows your cursor in the gutter, a statusline footer
+lists whichever keymaps are active this session, and the background is
+forced true black (`#000000`) so it melts into a black terminal while your
+colorscheme's foregrounds survive. All of it degrades to a no-op on an
+older Neovim instead of blocking the session.
+
 Also want to browse past drafts without leaving the editor? A buffer-local
 keymap — `<leader>ph` by default — lists archived drafts (newest first) in a
 split; `<CR>` opens one, read-only. Forgot what any of this is bound to?
@@ -84,6 +92,9 @@ map edit --no-help-key           # don't register it at all
 map edit --fold-threshold 3      # auto-fold pastes of 3+ lines instead of 6
 map edit --no-fold-paste         # don't auto-fold pastes at all
 map edit --no-insert             # open in normal mode instead of insert mode
+map edit --no-prompt-gutter      # keep your line numbers/gutter (no '> ' marker)
+map edit --no-footer             # don't add the keymap footer to the statusline
+map edit --no-trueblack          # keep your colorscheme's own background
 map clear --keep 20              # override how many archived drafts to retain
 map clear --no-archive           # discard instead of archiving (e.g. it had a secret in it)
 ```

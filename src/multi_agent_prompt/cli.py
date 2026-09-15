@@ -44,6 +44,9 @@ def cmd_edit(args: argparse.Namespace) -> int:
         help_key=None if args.no_help_key else args.help_key,
         fold_threshold=None if args.no_fold_paste else args.fold_threshold,
         insert=not args.no_insert,
+        prompt_gutter=not args.no_prompt_gutter,
+        footer_keymaps=not args.no_footer,
+        trueblack_bg=not args.no_trueblack,
     )
 
 
@@ -210,6 +213,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Open in normal mode instead of dropping straight into insert mode",
     )
+    edit_parser.add_argument(
+        "--no-prompt-gutter",
+        action="store_true",
+        help="Keep line numbers / the regular gutter instead of a cursor-tracking '> ' prompt marker",
+    )
+    edit_parser.add_argument(
+        "--no-footer",
+        action="store_true",
+        help="Don't show an active-keymap footer in the statusline",
+    )
+    edit_parser.add_argument(
+        "--no-trueblack",
+        action="store_true",
+        help="Don't force a #000000 background (keep the colorscheme's own background)",
+    )
     edit_parser.set_defaults(func=cmd_edit)
 
     where_parser = subparsers.add_parser(
@@ -329,6 +347,9 @@ def main(argv: list[str] | None = None) -> None:
         args.fold_threshold = DEFAULT_FOLD_THRESHOLD
         args.no_fold_paste = False
         args.no_insert = False
+        args.no_prompt_gutter = False
+        args.no_footer = False
+        args.no_trueblack = False
         args.func = cmd_edit
 
     sys.exit(args.func(args))
