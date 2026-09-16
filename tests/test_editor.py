@@ -179,6 +179,16 @@ def test_build_autosave_lua_help_mentions_fold_toggle_when_active():
     assert "za/zo/zc" not in lua_off
 
 
+def test_build_autosave_lua_fold_on_paste_lands_cursor_below_fold():
+    lua = build_autosave_lua(clear_key=None, history_dir=None, help_key=None)
+
+    assert '"%d,%dfold"' in lua
+    assert "local next_line = paste_end + 1" in lua
+    assert "next_line > vim.api.nvim_buf_line_count(0)" in lua
+    assert 'vim.api.nvim_buf_set_lines(0, -1, -1, false, {""})' in lua
+    assert "vim.api.nvim_win_set_cursor(0, {next_line, 0})" in lua
+
+
 def test_build_nvim_command_basic(tmp_path):
     file = tmp_path / "current.md"
 

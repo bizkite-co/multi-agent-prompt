@@ -31,7 +31,9 @@ session; see fold-on-paste.
     paste, `"+p`, `"*p`, ...) automatically folds (and closes) just those
     lines, via Neovim's ``vim.paste()`` override — so dropping a long CLI
     transcript or diff into the buffer doesn't bury the rest of what you're
-    writing. Standard Vim fold commands (``za``/``zo``/``zc``) toggle it;
+    writing, and the cursor lands on the line right below the folded block
+    (still in insert mode) so you can keep typing without an Esc-``o``
+    round-trip. Standard Vim fold commands (``za``/``zo``/``zc``) toggle it;
     nothing new to bind for that part. ``vim.paste`` is a *global* hook, not
     a buffer-local option — this does apply to any other buffer opened
     within this same throwaway session (e.g. one opened via the history
@@ -197,6 +199,14 @@ vim.paste = function(lines, phase)
     local paste_end = vim.api.nvim_win_get_cursor(0)[1]
     if paste_end - map_paste_start >= {fold_threshold} then
       vim.cmd(string.format("%d,%dfold", map_paste_start, paste_end))
+      -- Land on the line below the folded block (still in insert mode) so a
+      -- big paste doesn't strand the cursor inside the collapsed fold — no
+      -- Esc+`o` round-trip to keep writing.
+      local next_line = paste_end + 1
+      if next_line > vim.api.nvim_buf_line_count(0) then
+        vim.api.nvim_buf_set_lines(0, -1, -1, false, {{""}})
+      end
+      vim.api.nvim_win_set_cursor(0, {{next_line, 0}})
     end
     map_paste_start = nil
   end
@@ -307,7 +317,7 @@ vim.opt.background = "dark"
 local map_bg_groups = {{{"".join(f'"{g}", ' for g in _TRUEBLACK_GROUPS)}}}
 local function map_trueblack(name)
   local ok, cur = pcall(vim.api.nvim_get_hl, 0, {{ name = name }})
-  if not ok or not cur or vim.tbl_isempty(cur) then
+  if not ok or not cur then
     return
   end
   local hl = {{ bg = "#000000" }}

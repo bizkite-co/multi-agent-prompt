@@ -289,7 +289,7 @@ def test_paste_at_or_above_threshold_creates_a_closed_fold(tmp_path):
         time.sleep(0.2)
         lua_check = (
             ':lua vim.fn.writefile({tostring(vim.fn.foldclosed(1)) .. "|" .. '
-            f'tostring(vim.fn.line("$"))}}, "{result_file}")\r'
+            f'tostring(vim.fn.line(".")) .. "|" .. tostring(vim.fn.line("$"))}}, "{result_file}")\r'
         )
         os.write(master, lua_check.encode())
         time.sleep(0.3)
@@ -300,9 +300,12 @@ def test_paste_at_or_above_threshold_creates_a_closed_fold(tmp_path):
         if proc.poll() is None:
             proc.kill()
 
-    foldclosed, total_lines = result_file.read_text().strip().split("|")
-    assert total_lines == "10"
+    foldclosed, cursor_line, total_lines = result_file.read_text().strip().split("|")
+    assert total_lines == "11"  # a trailing blank was opened below the pasted block
     assert foldclosed == "1"  # a closed fold starting at line 1 covers the paste
+    # The cursor was moved to the line below the fold so the user can keep
+    # typing, rather than being stranded inside the collapsed block.
+    assert cursor_line == "11"
 
 
 def test_paste_below_threshold_is_not_folded(tmp_path):
