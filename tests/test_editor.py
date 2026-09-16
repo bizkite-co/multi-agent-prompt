@@ -281,8 +281,8 @@ def test_build_ui_lua_prompt_gutter_disables_numbers_and_adds_marker():
 
     assert "vim.opt.number = false" in lua
     assert "vim.opt.relativenumber = false" in lua
-    assert 'vim.opt.signcolumn = "yes"' in lua
-    assert 'sign_text = "> "' in lua
+    assert 'vim.opt.signcolumn = "yes:1"' in lua
+    assert 'sign_text = ">"' in lua
     for event in ("CursorMoved", "CursorMovedI", "TextChanged", "TextChangedI"):
         assert event in lua
 
@@ -291,7 +291,7 @@ def test_build_ui_lua_prompt_gutter_off_leaves_numbers_alone():
     lua = build_ui_lua(prompt_gutter=False)
 
     assert "vim.opt.number" not in lua
-    assert 'sign_text = "> "' not in lua
+    assert 'sign_text = ">"' not in lua
 
 
 def test_build_ui_lua_footer_lists_active_keys_by_default():
@@ -361,7 +361,7 @@ def test_build_nvim_command_layers_ui_lua_after_autosave(tmp_path):
 
     joined = " ".join(argv)
     autosave_pos = joined.index("timer:start(")
-    ui_pos = joined.index("sign_text = \"> \"")
+    ui_pos = joined.index('sign_text = ">"')
     assert autosave_pos < ui_pos
 
 

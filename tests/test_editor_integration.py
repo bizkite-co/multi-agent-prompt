@@ -374,7 +374,7 @@ def test_ui_layer_applies_prompt_gutter_footer_and_trueblack(tmp_path):
 
     assert rc == 0
     assert out["number_off"] == "true"
-    assert out["signcol"] == "yes"
+    assert out["signcol"] == "yes:1"
     assert out["footer"] == "true"
     assert out["bg_black"] == "true"
     assert out["marks"] == "1"

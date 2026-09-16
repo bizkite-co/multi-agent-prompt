@@ -261,7 +261,7 @@ end, {{ buffer = 0, desc = "multi-agent-prompt: show keymap help" }})
 _GUTTER_LUA = """
 vim.opt.number = false
 vim.opt.relativenumber = false
-vim.opt.signcolumn = "yes"
+vim.opt.signcolumn = "yes:1"
 local map_gutter_ns = vim.api.nvim_create_namespace("map-gutter")
 local map_gutter_id
 local function map_place_gutter()
@@ -276,7 +276,7 @@ local function map_place_gutter()
   -- headless cursors can report 0-based/0 rows, so clamp to [0, count-1].
   local line = math.max(0, math.min(vim.fn.line(".") - 1, count - 1))
   map_gutter_id = vim.api.nvim_buf_set_extmark(0, map_gutter_ns, line, 0, {
-    sign_text = "> ",
+    sign_text = ">",
     hl_group = "CursorLineNr",
     priority = 200,
   })
