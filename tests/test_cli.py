@@ -43,6 +43,40 @@ def test_cmd_show_prints_content(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out == "draft content"
 
 
+def test_cmd_self_up_upgrades_via_uv_tool(monkeypatch, capsys):
+    import subprocess
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    parser = cli.build_parser()
+    args = parser.parse_args(["self-up"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert calls == [["uv", "tool", "upgrade", "multi-agent-prompt"]]
+    out = capsys.readouterr().out
+    assert "Successfully upgraded" in out
+
+
+def test_cmd_self_up_reports_uv_failure(monkeypatch, capsys):
+    import subprocess
+
+    def failing_run(cmd, **kwargs):
+        raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(subprocess, "run", failing_run)
+    parser = cli.build_parser()
+    args = parser.parse_args(["self-up"])
+    rc = args.func(args)
+
+    assert rc == 1
+    assert "Error upgrading" in capsys.readouterr().out
+
+
 def test_cmd_pop_prints_content_and_clears_in_one_step(tmp_path, monkeypatch, capsys):
     """What /prompt uses: read + log + clear as one operation, no separate
     `map clear` for the user (or the skill) to remember to run."""

@@ -22,6 +22,7 @@ def test_bare_version_only_displays_info():
     assert rc == 0
     mock_verkit.display_version_info.assert_called_once()
     assert mock_verkit.display_version_info.call_args[0][1] == cli.PACKAGE_NAME
+    assert mock_verkit.display_version_info.call_args.kwargs.get("upgrade_cmd") == "map self-up"
     mock_verkit.promote_version.assert_not_called()
     mock_verkit.tag_version.assert_not_called()
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 
 import verkit
@@ -99,7 +100,7 @@ def cmd_version(args: argparse.Namespace) -> int:
     pushes; `release` does both atomically.
     """
     console = Console()
-    verkit.display_version_info(console, PACKAGE_NAME)
+    verkit.display_version_info(console, PACKAGE_NAME, upgrade_cmd="map self-up")
 
     try:
         if args.version_command == "release":
@@ -122,6 +123,23 @@ def cmd_version(args: argparse.Namespace) -> int:
         console.print(f"[red]Error during version operation: {e}[/red]")
         return 1
 
+    return 0
+
+
+def cmd_self_up(_args: argparse.Namespace) -> int:
+    """Upgrade the installed `map` tool to the latest PyPI release via uv.
+
+    Mirrors task-agent's `ta self-up`: `map` ships as a uv tool, so this is
+    just `uv tool upgrade multi-agent-prompt` — no source checkout needed.
+    """
+    console = Console()
+    console.print("[blue]Upgrading multi-agent-prompt via uv...[/blue]")
+    try:
+        subprocess.run(["uv", "tool", "upgrade", PACKAGE_NAME], check=True)
+        console.print("[bold green]Successfully upgraded multi-agent-prompt.[/bold green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Error upgrading multi-agent-prompt: {e}[/red]")
+        return 1
     return 0
 
 
@@ -279,6 +297,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     clear_parser.set_defaults(func=cmd_clear)
 
+    up_parser = subparsers.add_parser(
+        "self-up", help="Upgrade the installed `map` tool to the latest PyPI release via uv"
+    )
+    up_parser.set_defaults(func=cmd_self_up)
+
     version_parser = subparsers.add_parser(
         "version", help="Show version, promote, tag, or run a full release"
     )
@@ -329,7 +352,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.version:
-        verkit.display_version_info(Console(), PACKAGE_NAME)
+        verkit.display_version_info(Console(), PACKAGE_NAME, upgrade_cmd="map self-up")
         sys.exit(0)
 
     if args.command is None:
