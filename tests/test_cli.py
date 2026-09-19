@@ -128,6 +128,66 @@ def test_cmd_pop_no_archive_flag_discards_content(tmp_path, monkeypatch):
     assert not (repo / ".ma" / "prompt" / "archive").exists()
 
 
+def test_cmd_pop_stage_writes_handoff_copy(tmp_path, monkeypatch, capsys):
+    """--stage (what the Claude Code /prompt hook uses): archive + clear the
+    scratch file AND write the popped draft to handoff.md, so the host's
+    @-include — which resolves after the hook — still sees the content."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    (repo / ".ma" / "prompt").mkdir(parents=True)
+    target = repo / ".ma" / "prompt" / "current.md"
+    target.write_text("handed off draft")
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["pop", "--stage"])
+    rc = args.func(args)
+
+    handoff = repo / ".ma" / "prompt" / "handoff.md"
+    assert rc == 0
+    assert capsys.readouterr().out == "handed off draft"
+    assert target.read_text() == ""
+    assert handoff.read_text() == "handed off draft"
+    assert len(list((repo / ".ma" / "prompt" / "archive").glob("*.md"))) == 1
+
+
+def test_cmd_pop_stage_overwrites_stale_handoff_with_empty(tmp_path, monkeypatch):
+    """A staged pop with nothing drafted must leave an EMPTY handoff (the host
+    include then reads empty), never a previous handoff's stale content."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    prompt_dir = repo / ".ma" / "prompt"
+    prompt_dir.mkdir(parents=True)
+    (prompt_dir / "current.md").write_text("")
+    (prompt_dir / "handoff.md").write_text("previous handoff, now stale")
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["pop", "--stage"])
+    args.func(args)
+
+    assert (prompt_dir / "handoff.md").read_text() == ""
+
+
+def test_cmd_pop_without_stage_leaves_handoff_alone(tmp_path, monkeypatch):
+    """Plain pop (what the opencode !-substitution uses) must not touch any
+    existing handoff stage — only --stage manages it."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    prompt_dir = repo / ".ma" / "prompt"
+    prompt_dir.mkdir(parents=True)
+    (prompt_dir / "current.md").write_text("new draft")
+    (prompt_dir / "handoff.md").write_text("untouched stage")
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["pop"])
+    args.func(args)
+
+    assert (prompt_dir / "handoff.md").read_text() == "untouched stage"
+    assert (prompt_dir / "current.md").read_text() == ""
+
+
 def test_cmd_clear_empties_file(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)

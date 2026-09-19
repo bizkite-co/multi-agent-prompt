@@ -86,6 +86,13 @@ def cmd_pop(args: argparse.Namespace) -> int:
     content = file.read_text(encoding="utf-8") if file.exists() else ""
     keep = archive.resolve_archive_keep(args.keep)
     archive.archive_and_clear(file, keep=keep, archive=not args.no_archive)
+    if args.stage:
+        # Hosts whose /prompt splices file content via an ``@``-include
+        # (Claude Code) pop through a hook *before* the include resolves,
+        # so the include must read this staged copy, not the scratch file.
+        handoff = paths.handoff_file()
+        handoff.parent.mkdir(parents=True, exist_ok=True)
+        handoff.write_text(content, encoding="utf-8")
     sys.stdout.write(content)
     return 0
 
@@ -275,6 +282,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-archive",
         action="store_true",
         help="Discard the draft instead of archiving it (e.g. it contained a secret)",
+    )
+    pop_parser.add_argument(
+        "--stage",
+        action="store_true",
+        help=(
+            "Also write the popped draft to .ma/prompt/handoff.md — the staged "
+            "copy a host's @-include reads when /prompt pops via a pre-expansion "
+            "hook (Claude Code)"
+        ),
     )
     pop_parser.set_defaults(func=cmd_pop)
 

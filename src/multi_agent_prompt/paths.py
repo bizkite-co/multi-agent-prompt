@@ -21,6 +21,11 @@ MA_DIRNAME = ".ma"
 PRODUCT_DIRNAME = "prompt"
 PROMPT_FILENAME = "current.md"
 ARCHIVE_DIRNAME = "archive"
+#: Written by ``map pop --stage``: the just-popped draft, staged for hosts
+#: (Claude Code) whose ``@``-include command files can only read a file, not
+#: run a command. The host's hook pops *before* the include resolves, so the
+#: include sees this file instead of the already-cleared scratch file.
+HANDOFF_FILENAME = "handoff.md"
 
 # Anything that already covers `.ma/prompt/` — including a broader existing
 # `.ma/` entry a future sibling product's setup might have added — counts as
@@ -70,6 +75,18 @@ def prompt_file(start: Path | None = None) -> Path:
 def archive_dir(start: Path | None = None) -> Path:
     """Where previously-cleared drafts for this project are kept."""
     return prompt_dir(start) / ARCHIVE_DIRNAME
+
+
+def handoff_file(start: Path | None = None) -> Path:
+    """The staged-handoff file for the project containing ``start``.
+
+    ``map pop --stage`` writes the popped draft here so hosts that splice
+    file content into a prompt (``@``-includes) can pick it up after the
+    scratch file has already been archived and cleared. Overwritten on
+    every staged pop — including with empty content, so a handoff with
+    nothing drafted reads as empty rather than stale.
+    """
+    return prompt_dir(start) / HANDOFF_FILENAME
 
 
 def ensure_gitignored(start: Path | None = None) -> bool:

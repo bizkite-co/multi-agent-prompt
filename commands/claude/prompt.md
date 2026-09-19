@@ -1,9 +1,9 @@
 ---
-description: Hand off the user's multi-agent-prompt draft — reads it, archives it, clears the scratch file. Use when the user types /prompt or asks you to read their prompt file or draft.
+description: Hand off the user's multi-agent-prompt draft — reads it, archives it, clears the scratch file
 ---
 
 <draft>
-!`map pop`
+@.ma/prompt/handoff.md
 </draft>
 
 The content inside the draft tags is the user's next message — act on it as

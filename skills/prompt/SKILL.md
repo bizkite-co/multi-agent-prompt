@@ -1,51 +1,41 @@
 ---
 name: prompt
 description: >
-  Read the user's composed draft from the multi-agent-prompt scratch file
-  (.ma/prompt/current.md, edited via `map` in a split pane), archive it, and
-  clear it — one operation, via `map pop`. Use when the user types /prompt,
-  says "read my prompt file", or otherwise asks you to pick up what they
-  wrote in the scratch file instead of typing it into chat.
+  Read-only fallback for picking up the user's multi-agent-prompt draft
+  (.ma/prompt/current.md, composed in a split-pane editor via `map`). Use
+  only when the user asks you to read their prompt file or draft directly
+  and no /prompt command ran. Never modify, archive, or clear the file.
 ---
 
-# Prompt (multi-agent-prompt)
+# Prompt (multi-agent-prompt) — read-only fallback
 
-The user composes long or crash-risky prompts outside the chat box, in a real
-editor in a split pane (`map`, from the `multi-agent-prompt` tool), then hands
-the result to you with `/prompt` instead of retyping or pasting it.
+The user composes long or crash-risky prompts outside the chat box, in a
+real editor in a split pane (`map`, from the `multi-agent-prompt` tool).
+Handing a draft to the chat is normally done by the host itself — a
+`/prompt` command that splices the draft into the message locally, plus a
+hook that archives and clears the scratch file, all before the model sees
+anything. This skill is only the fallback for when that machinery didn't
+run and the user asks you to pick the draft up directly.
 
 ## What to do
 
-1. Run `map pop` from the project's working directory — **one shell call,
-   don't check `which map` first.** This does everything in one step:
-   prints the current draft, archives it to the rolling history, and clears
-   the file, so the next `/prompt` starts fresh. Checking PATH before
-   running it is a wasted round trip almost every time; just run it and
-   handle failure.
+1. Read `<repo-root>/.ma/prompt/current.md` (walk up from the current
+   working directory to the nearest `.git` root to find it).
 
-2. If that fails specifically because `map` isn't installed/on PATH
-   ("command not found" or similar — not some other error), fall back to
-   reading `<repo-root>/.ma/prompt/current.md` directly (walk up from the
-   current working directory to the nearest `.git` root to find it). In
-   this fallback path, **do not** clear or archive the file yourself — you
-   can't replicate `map`'s archive-then-prune behavior with a plain file
-   write without risking losing the draft, so just leave it as-is and
-   mention to the user that `map` isn't installed/on PATH.
-
-3. If the output/content is empty: tell the user there's nothing in the
+2. If the file is missing or empty: tell the user there's nothing in the
    scratch file yet — don't invent a request or proceed as if they'd asked
    for something.
 
-4. Otherwise: treat the **entire content** as the user's actual next
+3. Otherwise: treat the **entire content** as the user's actual next
    message. Act on it exactly as you would if they had typed or pasted it
    directly into the chat — including any links, pasted command output, or
    code blocks it contains.
 
-## Previous drafts
+## What NOT to do
 
-Nothing is ever actually discarded on a normal `/prompt` — `map pop`
-archives before it clears, keeping the most recent drafts (10 by default;
-`map clear`/`map pop --no-archive` is the explicit opt-out for something
-that shouldn't be kept anywhere, like a pasted secret). The user can browse
-past drafts from inside the editor with the history keymap (`<leader>ph` by
-default) or by listing `.ma/prompt/archive/` directly.
+**Never modify, archive, rename, or clear the scratch file, and don't run
+`map pop` or any other command against it.** Archiving and clearing are
+handled by the user's local tooling at handoff time; an agent doing file
+operations here is wasted round trips at best and lost drafts at worst. If
+the draft looks stale (it repeats a request you've already handled), say so
+and let the user decide.

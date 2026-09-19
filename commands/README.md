@@ -1,22 +1,19 @@
 # Multi-Agent Prompt host commands
 
-The [skill](../skills/README.md) teaches the *LLM* to run `map pop` when the
-user types `/prompt` — one Bash tool call plus the skill body in context,
-every use. Hosts that can run shell commands while **building** the prompt —
-before the LLM is ever involved — can do better: a command file whose
-template injects `map pop`'s output directly, so the draft arrives as part of
-the user's message with zero extra round trips, no skill body, and no
-tool-call scaffolding. Archive-then-clear still happens — at send time, so a
-crash right after handoff can never lose the draft.
+`/prompt` hands a draft to the chat. The design rule: **the host, not the
+model, does the work.** Reading the draft, splicing it into the outgoing
+message, archiving, and clearing the scratch file all happen locally,
+before the model sees anything — the model only ever receives the draft
+content (plus one framing line and one guard line). No instructions about
+files, no tool calls, no "run this command" noise for the model to burn
+tokens on.
 
-Each host that supports this gets a directory here, named for the host.
+Each host gets a directory here, named for the host, using whatever
+local-expansion primitives that host actually has.
 
 ## Template design
 
-The model doesn't need to know *how* the draft got into the message — fetch
-mechanics, archive paths, PATH fallbacks are noise it pays for on every use,
-and each mechanic invites its own guard instruction ("don't run it again"),
-which is more noise. What earns its tokens:
+What earns its tokens:
 
 1. **The draft itself, first, clearly bounded** — it's the payload. Wrap it
    in `<draft>` tags, not a code fence: a fence collides with code blocks
@@ -26,12 +23,28 @@ which is more noise. What earns its tokens:
 3. **One guard line** — empty or error output means say so and wait; never
    invent a request.
 
+Anything else — fetch mechanics, archive paths, PATH fallbacks, "run the
+command exactly as written" instructions — is noise the model pays for on
+every use, and each such instruction invites the model to *actually run*
+things, which is precisely what this design exists to avoid.
+
 ## OpenCode
 
 OpenCode discovers commands from `.opencode/commands/` (per project) and
-`~/.config/opencode/commands/` (global). Its template syntax injects shell
-output inline with ``!`cmd` `` — expanded at send time, in the project root,
-before the model sees anything.
+`~/.config/opencode/commands/` (global). Its ``!`cmd` `` template syntax
+executes the command **during prompt construction** — in the project root,
+before the model sees anything — and splices only its *output* into the
+prompt (verified: no command string or tool-call scaffolding reaches the
+model). One primitive, one line:
+
+```markdown
+<draft>
+!`map pop`
+</draft>
+```
+
+`map pop` reads, archives, and clears in one local Python step, so this
+single substitution is the entire handoff.
 
 Project-local (travels with the repo):
 
@@ -44,52 +57,84 @@ User-global:
 
 ```bash
 mkdir -p ~/.config/opencode/commands
-cp commands/opencode/prompt.md ~/.config/opencode/commands/
+ln -sfn "$(pwd)/commands/opencode/prompt.md ~/.config/opencode/commands/prompt.md"
 ```
 
 Restart the TUI after installing — commands are discovered at startup.
 
 ## Claude Code
 
-Claude Code merged commands into skills: `.claude/commands/prompt.md` and
-`.claude/skills/prompt/SKILL.md` both create `/prompt`, and both support
-``!`cmd` `` dynamic context injection — the command runs at invocation and
-its output is spliced in before the model sees the content.
+Claude Code's ``!` `` injection annotates the model-visible message with a
+`● Bash(cmd 2>&1)` line, so the opencode one-liner isn't clean here.
+Instead `/prompt` is built from two local primitives:
 
-Install as a personal skill, with SKILL.md symlinked back to the repo so
-template edits propagate (or plain-`cp` it if you don't need that; edits
-through the symlink may need a session restart, since live skill-reload
-watches the directory rather than the link target):
+1. **The command file splices file content with an `@`-include:**
+   ```markdown
+   <draft>
+   @.ma/prompt/handoff.md
+   </draft>
+   ```
+   Claude resolves `@`-references locally at expansion — the model sees the
+   file's contents, not a command.
+2. **A `UserPromptExpansion` hook pops first**: `hosts/claude/prompt-pop.py`
+   (wired in `~/.claude/settings.json`) sees `command_name == "prompt"` and
+   runs `map pop --stage`, which archives + clears `current.md` and writes
+   the just-popped draft to `handoff.md` — the file the include then reads.
+   Ordering matters and is verified: the hook runs *before* the include
+   resolves, which is why the include targets the staged copy rather than
+   the scratch file. Silent by design — no stdout, every failure swallowed
+   (it's housekeeping, never worth blocking a conversation over).
+
+Install the command as a personal slash command (symlinked back to the repo
+so edits propagate):
 
 ```bash
-mkdir -p ~/.claude/skills/prompt
-ln -sfn "$(pwd)/commands/claude/prompt.md" ~/.claude/skills/prompt/SKILL.md
+mkdir -p ~/.claude/commands
+ln -sfn "$(pwd)/commands/claude/prompt.md" ~/.claude/commands/prompt.md
 ```
 
-Gotchas, both learned the hard way:
+And the hook (settings entry included below):
 
-- **A skill and a same-named command file collide — the skill wins.** Install
-  one or the other, not both.
-- **Never `cp` into `~/.claude/skills/prompt/SKILL.md` while
-  `~/.claude/skills/prompt` is a directory symlink** (e.g. one pointing at
-  this repo's `skills/prompt`) — the write goes through the link and
-  clobbers its target. Check `ls -la ~/.claude/skills/` first.
-- `~/.claude/skills/` is a compat source for Grok and OpenCode too. Give
-  those hosts a native copy of the portable skill (`~/.grok/skills/prompt` —
-  verified via `grok inspect` to win the bare `/prompt` name over the
-  `~/.claude` source). OpenCode's primary path is its own command, above;
-  its natural-language fallback will see the unexpanded ``!`map pop` ``
-  marker and usually recovers by running it as a shell command.
-- **Windows/PowerShell:** ``!`cmd` `` injection defaults to bash; on a
-  Windows install without Git Bash, add `shell: powershell` to the
-  frontmatter so it runs via Claude Code's PowerShell tool (on by default
-  there). The ``!` `` marker is parsed by Claude Code, not the shell, so
-  PowerShell's backtick-escape rules never touch the template. `map` itself
-  is pure Python and installs on Windows (`uv tool install
-  multi-agent-prompt`); OpenCode on Windows is WSL-first — inside WSL
-  everything is Linux-side and this template works unchanged.
+```json
+{
+  "hooks": {
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /path/to/repo/hosts/claude/prompt-pop.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-Keep the skill installed alongside it: the command covers the typed
-`/prompt` shortcut with zero overhead, while the skill still covers
-natural-language asks like "read my prompt file" and hosts without the
-command file.
+Gotchas, learned the hard way:
+
+- **A skill and a same-named command collide — never install
+  `~/.claude/skills/prompt/`.** A skill's body goes to the model as
+  instructions ("run `map pop`..."), which is exactly the leak this
+  architecture exists to prevent; the leftover skill install was the source
+  of agents refusing /prompt handoffs as "misdirected drafts". The
+  read-only fallback skill in `skills/prompt/` is for *other* hosts and
+  natural-language asks only — never install it as Claude Code's /prompt.
+- **`map` must support `--stage`** (v0.1.4+); the hook swallows the error on
+  older installs, which surfaces as `/prompt` reading a stale or empty
+  handoff. `map self-up` fixes it.
+- **Both paths resolve from the directory Claude was launched in** — launch
+  agents at the repo root, like the opencode command (which runs in the
+  project root).
+- The hook fires on any `/prompt`-named slash command expansion
+  (`command_name` match), from any source — that's the intent.
+
+## What the model actually sees
+
+For both hosts the answer is the same: the draft content, the framing line,
+the guard line, and nothing else. The `@`-include leaves a file-path
+mention as attachment metadata (the model can see *where* content came
+from, but is never asked to *do* anything with it) — if even that is
+unwanted, the opencode `!` form is strictly content-only.

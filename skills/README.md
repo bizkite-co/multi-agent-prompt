@@ -1,35 +1,22 @@
 # Multi-Agent Prompt portable skill
 
-One skill (`prompt`) that teaches a host to read the user's draft from
-`.ma/prompt/current.md` — the scratch file `map` edits — treat it as their
-next message, and clear it for the next one (via `map pop`, which archives
-before it clears) when they type `/prompt`.
+One skill (`prompt`): the **read-only fallback** for hosts that can't run
+local expansion at all. It teaches a host only to *read*
+`.ma/prompt/current.md` and treat the content as the user's next message —
+and explicitly forbids the agent from running `map pop`, archiving, or
+otherwise touching the file.
+
+The handoff itself is supposed to be invisible to the model: hosts with
+local expansion primitives do the read-splice-archive-clear entirely
+client-side (see [`commands/README.md`](../commands/README.md) — opencode
+``!` `` substitution, Claude Code `@`-include + hook). This skill exists
+only for hosts with no such machinery, and for natural-language asks like
+"read my prompt file". Where a `/prompt` command file is installed, prefer
+it — the skill never needs to run.
 
 ## Manual install
 
 Skills are a plain directory. Copy or symlink it into the host's skills path.
-
-### Claude Code
-
-Project-local (recommended):
-
-```bash
-mkdir -p .claude/skills
-ln -sfn ../../skills/prompt .claude/skills/prompt
-```
-
-User-global:
-
-```bash
-mkdir -p ~/.claude/skills
-cp -a skills/prompt ~/.claude/skills/
-```
-
-For Claude Code specifically, prefer the zero-overhead variant instead: its
-skills support ``!`cmd` `` dynamic context injection, so
-[`commands/claude/prompt.md`](../commands/README.md#claude-code) splices the
-draft in before the model sees anything. This portable skill remains the
-fallback for every host without injection.
 
 ### Antigravity CLI (`agy`)
 
@@ -41,17 +28,24 @@ cp -a skills/prompt .agents/skills/
 ### OpenCode
 
 OpenCode discovers skills from `.opencode/skills/` (project) or
-`~/.config/opencode/skills/` (global), including the Claude-compatible paths
-above. But for typed `/prompt`, prefer the native command instead — the
-harness itself runs `map pop` at send time and splices the draft into the
-message, zero LLM round trips. See
-[`commands/README.md`](../commands/README.md); keep the skill installed
-alongside it for natural-language asks.
+`~/.config/opencode/skills/` (global), including Claude-compatible paths.
+For typed `/prompt`, the native command is strictly better (local splice,
+zero model involvement) — see
+[`commands/README.md`](../commands/README.md). Install the skill only for
+natural-language asks on hosts without the command.
 
 ### Other hosts (Cursor, Copilot, Grok)
 
 Copy `skills/prompt` into that host's skills location. If the host doesn't
-support skills at all, `@prompt.md` / `@.ma/prompt/current.md` (file mention)
-works anywhere the host can see the file — including gitignored files, in
-most hosts. Note that a file mention just reads the content; it doesn't run
-`map pop`, so unlike `/prompt` it won't archive or clear the draft.
+support skills at all, `@prompt.md` / `@.ma/prompt/current.md` (file
+mention) works anywhere the host can see the file — including gitignored
+files, in most hosts. A file mention only reads the content; it doesn't
+archive or clear the draft.
+
+### Claude Code — do NOT install this skill
+
+A same-named skill beats the slash command, and a skill's body goes to the
+model as instructions — which reintroduces exactly the "agent runs file
+operations" behavior the command+hook architecture exists to avoid. Claude
+Code should have only the command + hook from
+[`commands/README.md`](../commands/README.md#claude-code).

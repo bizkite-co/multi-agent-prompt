@@ -46,12 +46,14 @@ typing, and immediately when you switch away from the pane
 
 When you're done, switch back to the agent pane and either:
 
-- Type `/prompt` (if the agent's install includes the skill or command —
-  see below) — reads the draft, archives it, and clears the file, all in one
-  step, or
+- Type `/prompt` (if the agent's install includes the command — see below).
+  The **host**, not the model, reads the draft, splices it into your
+  message, archives it, and clears the file — the model only ever sees the
+  draft content, never a command or a file-operation instruction, or
 - Reference `@prompt.md` / `@.ma/prompt/current.md` directly, if your agent
   supports file mentions and can see gitignored files — this is a plain
-  read, so unlike `/prompt` it doesn't archive or clear anything.
+  read (by the model), so unlike `/prompt` it doesn't archive or clear
+  anything.
 
 Pasting a long CLI transcript or diff in? Anything **6 lines or more**
 (bracketed paste, `"+p`, `"*p` — any paste source) auto-folds, closed, so it
@@ -171,29 +173,36 @@ knowing, from actually measuring it (not guessing):
   bare `python3 -c pass` alone is ~30ms of that, this package's own imports
   add maybe another ~20ms, and the rest is the file read/archive/write. If
   `/prompt` still feels slow, that latency lives in the *agent host's* own
-  tool-call round trip (spawning/sandboxing the shell command), not in
-  anything this package does — there's no nvim process in this path at all.
-  The one thing the `prompt` skill itself controls: it runs `map pop`
-  directly rather than checking `which map` first, since that check is a
-  second subprocess spawn that's a wasted round trip almost every time.
+  prompt-construction path, not in anything this package does — there's no
+  nvim process in this path at all. Claude Code's variant adds one hook
+  subprocess (`map pop --stage`, same ~60-85ms budget).
 
 ## Agent integration
 
-`skills/prompt/` is a portable [Agent Skill](https://code.claude.com/docs/en/skills)
-that teaches a host to read `.ma/prompt/current.md` and treat its content as
-the user's message when they type `/prompt`. See
-[`skills/README.md`](./skills/README.md) for install paths.
+The design rule for `/prompt`: **the host, not the model, does the work.**
+Reading the draft, splicing it into the outgoing message, archiving, and
+clearing the scratch file all run locally while the prompt is being built —
+the model only ever receives the draft content (plus one framing line and
+one guard line), never a command to run or a file operation to perform.
 
-Hosts that can run shell commands while *building* the prompt get a cheaper
-path: a native command file whose template runs `map pop` at send time and
-splices the draft into the message itself — zero LLM tool calls, no skill
-body in context, and the draft is archived (and the file cleared) even if
-the session dies before the model replies. OpenCode and Claude Code ship
-one today ([`commands/opencode/`](./commands/opencode/) and
-[`commands/claude/`](./commands/claude/)); see
-[`commands/README.md`](./commands/README.md). The skill stays installed
-alongside it for natural-language asks ("read my prompt file") and for hosts
-without command support.
+- **OpenCode**: a command file whose ``!`map pop` `` template substitution
+  executes at send time and splices only the output into the prompt.
+- **Claude Code**: a command file that `@`-includes the draft, plus a
+  `UserPromptExpansion` hook that runs `map pop --stage` first — archive +
+  clear + stage the content where the include reads it. (Claude's own
+  ``!` `` injection annotates the model-visible message with a
+  `● Bash(...)` line, hence the different mechanism.)
+
+See [`commands/README.md`](./commands/README.md) for the templates, hook
+script, and install steps.
+
+`skills/prompt/` is a **read-only fallback** for hosts without local
+expansion primitives: it teaches an agent only to *read*
+`.ma/prompt/current.md` — and explicitly forbids running `map pop` or
+touching the file. Never install it where a `/prompt` command file exists
+(a same-named skill wins in Claude Code, and its instruction body is
+exactly the model-driven file-op noise the command design avoids). See
+[`skills/README.md`](./skills/README.md).
 
 ## Why not tmux `send-keys` / auto-injection?
 
