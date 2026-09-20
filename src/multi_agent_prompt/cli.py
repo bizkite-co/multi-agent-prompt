@@ -75,25 +75,40 @@ def cmd_clear(args: argparse.Namespace) -> int:
     return 0
 
 
+#: The entire user-visible message when /prompt runs with nothing drafted —
+#: printed by `map pop` (and staged by `--stage`) so the host templates need
+#: no framing or guard verbiage around the draft at all: a handoff message
+#: is the draft verbatim, and this notice is the "empty draft" case. The
+#: final clause matters: without it some models treat the notice as a
+#: problem to investigate (reading files, chasing the tool) instead of a
+#: dead end to report.
+EMPTY_HANDOFF_NOTICE = (
+    "[map] no draft to hand off — .ma/prompt/current.md is empty. "
+    "Nothing to act on; say so and wait."
+)
+
+
 def cmd_pop(args: argparse.Namespace) -> int:
     """Read the draft, archive it, clear the file, and print what was read — one operation.
 
     This is what `/prompt` uses: hand the draft off and reset for the next
     one in a single step, so there's no separate "now go clear it" the user
-    has to remember to do.
+    has to remember to do. What the model receives is the draft verbatim —
+    or, when nothing was drafted, ``EMPTY_HANDOFF_NOTICE``.
     """
     file = paths.prompt_file()
     content = file.read_text(encoding="utf-8") if file.exists() else ""
     keep = archive.resolve_archive_keep(args.keep)
     archive.archive_and_clear(file, keep=keep, archive=not args.no_archive)
+    out = content if content.strip() else EMPTY_HANDOFF_NOTICE
     if args.stage:
         # Hosts whose /prompt splices file content via an ``@``-include
         # (Claude Code) pop through a hook *before* the include resolves,
         # so the include must read this staged copy, not the scratch file.
         handoff = paths.handoff_file()
         handoff.parent.mkdir(parents=True, exist_ok=True)
-        handoff.write_text(content, encoding="utf-8")
-    sys.stdout.write(content)
+        handoff.write_text(out, encoding="utf-8")
+    sys.stdout.write(out)
     return 0
 
 

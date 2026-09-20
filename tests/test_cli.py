@@ -100,6 +100,9 @@ def test_cmd_pop_prints_content_and_clears_in_one_step(tmp_path, monkeypatch, ca
 
 
 def test_cmd_pop_empty_when_file_missing(tmp_path, monkeypatch, capsys):
+    """No draft → pop's whole output is the empty-handoff notice, so a host
+    template that is nothing but the substitution still yields a sensible
+    message (never a silent empty one)."""
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     monkeypatch.chdir(repo)
@@ -109,7 +112,21 @@ def test_cmd_pop_empty_when_file_missing(tmp_path, monkeypatch, capsys):
     rc = args.func(args)
 
     assert rc == 0
-    assert capsys.readouterr().out == ""
+    assert capsys.readouterr().out == cli.EMPTY_HANDOFF_NOTICE
+
+
+def test_cmd_pop_whitespace_draft_reads_as_empty(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    (repo / ".ma" / "prompt").mkdir(parents=True)
+    (repo / ".ma" / "prompt" / "current.md").write_text("  \n\n")
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["pop"])
+    args.func(args)
+
+    assert capsys.readouterr().out == cli.EMPTY_HANDOFF_NOTICE
 
 
 def test_cmd_pop_no_archive_flag_discards_content(tmp_path, monkeypatch):
@@ -151,9 +168,10 @@ def test_cmd_pop_stage_writes_handoff_copy(tmp_path, monkeypatch, capsys):
     assert len(list((repo / ".ma" / "prompt" / "archive").glob("*.md"))) == 1
 
 
-def test_cmd_pop_stage_overwrites_stale_handoff_with_empty(tmp_path, monkeypatch):
-    """A staged pop with nothing drafted must leave an EMPTY handoff (the host
-    include then reads empty), never a previous handoff's stale content."""
+def test_cmd_pop_stage_overwrites_stale_handoff_with_notice(tmp_path, monkeypatch):
+    """A staged pop with nothing drafted must stage the empty-handoff notice
+    (what the host include then reads — a clear message, never a resend of
+    a previous handoff's stale content and never a silent empty message)."""
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     monkeypatch.chdir(repo)
@@ -166,7 +184,7 @@ def test_cmd_pop_stage_overwrites_stale_handoff_with_empty(tmp_path, monkeypatch
     args = parser.parse_args(["pop", "--stage"])
     args.func(args)
 
-    assert (prompt_dir / "handoff.md").read_text() == ""
+    assert (prompt_dir / "handoff.md").read_text() == cli.EMPTY_HANDOFF_NOTICE
 
 
 def test_cmd_pop_without_stage_leaves_handoff_alone(tmp_path, monkeypatch):

@@ -181,9 +181,11 @@ knowing, from actually measuring it (not guessing):
 
 The design rule for `/prompt`: **the host, not the model, does the work.**
 Reading the draft, splicing it into the outgoing message, archiving, and
-clearing the scratch file all run locally while the prompt is being built —
-the model only ever receives the draft content (plus one framing line and
-one guard line), never a command to run or a file operation to perform.
+clearing the scratch file all run locally while the prompt is being built.
+The model receives the draft **verbatim** — a handoff is indistinguishable
+from the user having typed it into the chat box — or, when nothing was
+drafted, a single locally-generated notice ("no draft to hand off"). No
+tags, no framing, no file-operation instructions.
 
 - **OpenCode**: a command file whose ``!`map pop` `` template substitution
   executes at send time and splices only the output into the prompt.

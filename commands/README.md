@@ -13,20 +13,21 @@ local-expansion primitives that host actually has.
 
 ## Template design
 
-What earns its tokens:
+The outgoing message should be **indistinguishable from the user having
+typed the draft into the chat box**: the draft, verbatim, and nothing else.
+No `<draft>` tags, no framing line ("act on this as if typed"), no guard
+line ("if empty, say so") — none of it earns tokens, and every such line is
+one more thing a model can misread or refuse (a "run this command"
+instruction in a leaked template is exactly how agents came to reject
+/prompt handoffs as misdirected drafts).
 
-1. **The draft itself, first, clearly bounded** — it's the payload. Wrap it
-   in `<draft>` tags, not a code fence: a fence collides with code blocks
-   inside the draft.
-2. **One framing line** — the tagged block is the user's actual next
-   message; act on it as if typed directly.
-3. **One guard line** — empty or error output means say so and wait; never
-   invent a request.
-
-Anything else — fetch mechanics, archive paths, PATH fallbacks, "run the
-command exactly as written" instructions — is noise the model pays for on
-every use, and each such instruction invites the model to *actually run*
-things, which is precisely what this design exists to avoid.
+The one case that needs words — nothing was drafted — generates them
+**locally in the tool instead**: `map pop` (and `map pop --stage`) emits
+`EMPTY_HANDOFF_NOTICE` as its entire output, so even a bare template yields
+a clear message the model can relay to the user (the trailing "say so and
+wait" is load-bearing: without it some models treat the notice as a problem
+to investigate — reading files, chasing the tool — instead of a dead end
+to report).
 
 ## OpenCode
 
@@ -35,16 +36,16 @@ OpenCode discovers commands from `.opencode/commands/` (per project) and
 executes the command **during prompt construction** — in the project root,
 before the model sees anything — and splices only its *output* into the
 prompt (verified: no command string or tool-call scaffolding reaches the
-model). One primitive, one line:
+model). The whole template is the substitution, so the message *is* the
+draft:
 
 ```markdown
-<draft>
 !`map pop`
-</draft>
 ```
 
-`map pop` reads, archives, and clears in one local Python step, so this
-single substitution is the entire handoff.
+`map pop` reads, archives, and clears in one local Python step (emitting
+the empty-handoff notice when nothing was drafted), so this single
+substitution is the entire handoff.
 
 Project-local (travels with the repo):
 
@@ -70,20 +71,19 @@ Instead `/prompt` is built from two local primitives:
 
 1. **The command file splices file content with an `@`-include:**
    ```markdown
-   <draft>
    @.ma/prompt/handoff.md
-   </draft>
    ```
    Claude resolves `@`-references locally at expansion — the model sees the
    file's contents, not a command.
 2. **A `UserPromptExpansion` hook pops first**: `hosts/claude/prompt-pop.py`
    (wired in `~/.claude/settings.json`) sees `command_name == "prompt"` and
    runs `map pop --stage`, which archives + clears `current.md` and writes
-   the just-popped draft to `handoff.md` — the file the include then reads.
-   Ordering matters and is verified: the hook runs *before* the include
-   resolves, which is why the include targets the staged copy rather than
-   the scratch file. Silent by design — no stdout, every failure swallowed
-   (it's housekeeping, never worth blocking a conversation over).
+   the just-popped draft (or the empty-handoff notice) to `handoff.md` —
+   the file the include then reads. Ordering matters and is verified: the
+   hook runs *before* the include resolves, which is why the include
+   targets the staged copy rather than the scratch file. Silent by design —
+   no stdout, every failure swallowed (it's housekeeping, never worth
+   blocking a conversation over).
 
 Install the command as a personal slash command (symlinked back to the repo
 so edits propagate):
@@ -133,8 +133,10 @@ Gotchas, learned the hard way:
 
 ## What the model actually sees
 
-For both hosts the answer is the same: the draft content, the framing line,
-the guard line, and nothing else. The `@`-include leaves a file-path
-mention as attachment metadata (the model can see *where* content came
-from, but is never asked to *do* anything with it) — if even that is
+For both hosts the answer is the same: the draft, verbatim — nothing else.
+A handoff is indistinguishable from the user having typed the draft into
+the chat box; when nothing was drafted, the entire message is the
+locally-generated empty-handoff notice. The `@`-include leaves a file-path
+mention as attachment metadata on Claude (the model can see *where* content
+came from, but is never asked to *do* anything with it) — if even that is
 unwanted, the opencode `!` form is strictly content-only.
