@@ -169,7 +169,7 @@ def test_cmd_pop_stage_writes_handoff_copy(tmp_path, monkeypatch, capsys):
 
 
 def test_cmd_pop_stage_overwrites_stale_handoff_with_notice(tmp_path, monkeypatch):
-    """A staged pop with nothing drafted must stage the empty-handoff notice
+    """A staged pop with nothing composed must stage the empty-handoff notice
     (what the host include then reads — a clear message, never a resend of
     a previous handoff's stale content and never a silent empty message)."""
     repo = tmp_path / "repo"

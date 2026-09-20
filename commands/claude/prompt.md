@@ -1,5 +1,5 @@
 ---
-description: Hand off your multi-agent-prompt draft
+description: Hand off what you wrote in the map editor
 ---
 
 @.ma/prompt/handoff.md

@@ -184,7 +184,7 @@ Reading the draft, splicing it into the outgoing message, archiving, and
 clearing the scratch file all run locally while the prompt is being built.
 The model receives the draft **verbatim** — a handoff is indistinguishable
 from the user having typed it into the chat box — or, when nothing was
-drafted, a single locally-generated notice ("no draft to hand off"). No
+composed, a single locally-generated notice ("no prompt to hand off"). No
 tags, no framing, no file-operation instructions.
 
 - **OpenCode**: a command file whose ``!`map pop` `` template substitution

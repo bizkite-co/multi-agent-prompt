@@ -75,15 +75,16 @@ def cmd_clear(args: argparse.Namespace) -> int:
     return 0
 
 
-#: The entire user-visible message when /prompt runs with nothing drafted —
-#: printed by `map pop` (and staged by `--stage`) so the host templates need
-#: no framing or guard verbiage around the draft at all: a handoff message
-#: is the draft verbatim, and this notice is the "empty draft" case. The
+#: The entire user-visible message when /prompt runs with nothing to hand
+#: off — printed by `map pop` (and staged by `--stage`) so the host
+#: templates need no framing or guard verbiage at all: a handoff message is
+#: the prompt verbatim, and this notice is the "nothing composed" case. The
 #: final clause matters: without it some models treat the notice as a
 #: problem to investigate (reading files, chasing the tool) instead of a
-#: dead end to report.
+#: dead end to report. Wording note: never "draft" or file-operation
+#: language — this text is model-visible.
 EMPTY_HANDOFF_NOTICE = (
-    "[map] no draft to hand off — .ma/prompt/current.md is empty. "
+    "[map] no prompt to hand off — .ma/prompt/current.md is empty. "
     "Nothing to act on; say so and wait."
 )
 
@@ -94,7 +95,7 @@ def cmd_pop(args: argparse.Namespace) -> int:
     This is what `/prompt` uses: hand the draft off and reset for the next
     one in a single step, so there's no separate "now go clear it" the user
     has to remember to do. What the model receives is the draft verbatim —
-    or, when nothing was drafted, ``EMPTY_HANDOFF_NOTICE``.
+    or, when nothing was composed, ``EMPTY_HANDOFF_NOTICE``.
     """
     file = paths.prompt_file()
     content = file.read_text(encoding="utf-8") if file.exists() else ""

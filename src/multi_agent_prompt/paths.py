@@ -83,8 +83,8 @@ def handoff_file(start: Path | None = None) -> Path:
     ``map pop --stage`` writes the popped draft here so hosts that splice
     file content into a prompt (``@``-includes) can pick it up after the
     scratch file has already been archived and cleared. Overwritten on
-    every staged pop — including with empty content, so a handoff with
-    nothing drafted reads as empty rather than stale.
+    every staged pop — with the prompt, or with the empty-handoff notice
+    when nothing was composed, so it can never serve stale content.
     """
     return prompt_dir(start) / HANDOFF_FILENAME
 

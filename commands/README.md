@@ -21,7 +21,7 @@ one more thing a model can misread or refuse (a "run this command"
 instruction in a leaked template is exactly how agents came to reject
 /prompt handoffs as misdirected drafts).
 
-The one case that needs words — nothing was drafted — generates them
+The one case that needs words — nothing was composed — generates them
 **locally in the tool instead**: `map pop` (and `map pop --stage`) emits
 `EMPTY_HANDOFF_NOTICE` as its entire output, so even a bare template yields
 a clear message the model can relay to the user (the trailing "say so and
@@ -44,7 +44,7 @@ draft:
 ```
 
 `map pop` reads, archives, and clears in one local Python step (emitting
-the empty-handoff notice when nothing was drafted), so this single
+the empty-handoff notice when nothing was composed), so this single
 substitution is the entire handoff.
 
 Project-local (travels with the repo):
@@ -135,7 +135,7 @@ Gotchas, learned the hard way:
 
 For both hosts the answer is the same: the draft, verbatim — nothing else.
 A handoff is indistinguishable from the user having typed the draft into
-the chat box; when nothing was drafted, the entire message is the
+the chat box; when nothing was composed, the entire message is the
 locally-generated empty-handoff notice. The `@`-include leaves a file-path
 mention as attachment metadata on Claude (the model can see *where* content
 came from, but is never asked to *do* anything with it) — if even that is
