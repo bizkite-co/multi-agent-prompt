@@ -199,8 +199,11 @@ tags, no framing, no file-operation instructions.
   and injects the prompt as a genuine user message — agy has no include or
   substitution primitive, but its hooks can inject trajectory steps.
 
-See [`commands/README.md`](./commands/README.md) for the templates, hook
-script, and install steps.
+See [`commands/README.md`](./commands/README.md) for the per-host
+comparative table, templates, hook scripts, and install steps —
+[`commands/decisions.md`](./commands/decisions.md) for the cross-cutting
+design decisions, and [`commands/turn-end.md`](./commands/turn-end.md) for
+the turn-end hook surface (agent done / question / report).
 
 `skills/prompt/` is a **read-only fallback** for hosts without local
 expansion primitives: it teaches an agent only to *read*

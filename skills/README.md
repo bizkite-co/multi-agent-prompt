@@ -22,7 +22,7 @@ Skills are a plain directory. Copy or symlink it into the host's skills path.
 
 agy's `/prompt` is built from a frontmatter-only skill plus a
 `PreInvocation` hook that pops and injects the prompt as a user message —
-see [`commands/README.md`](../commands/README.md#antigravity-cli-agy).
+see [`commands/agy/README.md`](../commands/agy/README.md).
 Don't install this fallback skill for agy: a same-named skill would win
 the `/prompt` name and its instruction body is exactly the model-driven
 behavior the command + hook design avoids. (The fallback skill remains
@@ -51,4 +51,4 @@ A same-named skill beats the slash command, and a skill's body goes to the
 model as instructions — which reintroduces exactly the "agent runs file
 operations" behavior the command+hook architecture exists to avoid. Claude
 Code should have only the command + hook from
-[`commands/README.md`](../commands/README.md#claude-code).
+[`commands/claude/README.md`](../commands/claude/README.md).
