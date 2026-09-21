@@ -38,7 +38,7 @@ def _main() -> int:
         subprocess.run(
             [cmd, "pop", "--stage"],
             cwd=data.get("cwd") or ".",
-            capture_output=True,
+            capture_output=True, check=False,
             timeout=15,
         )
     except (OSError, subprocess.SubprocessError, ValueError):

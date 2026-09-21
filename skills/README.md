@@ -18,12 +18,15 @@ it — the skill never needs to run.
 
 Skills are a plain directory. Copy or symlink it into the host's skills path.
 
-### Antigravity CLI (`agy`)
+### Antigravity CLI (`agy`) — use the command + hook instead
 
-```bash
-mkdir -p .agents/skills
-cp -a skills/prompt .agents/skills/
-```
+agy's `/prompt` is built from a frontmatter-only skill plus a
+`PreInvocation` hook that pops and injects the prompt as a user message —
+see [`commands/README.md`](../commands/README.md#antigravity-cli-agy).
+Don't install this fallback skill for agy: a same-named skill would win
+the `/prompt` name and its instruction body is exactly the model-driven
+behavior the command + hook design avoids. (The fallback skill remains
+for hosts with no hook or expansion primitives at all.)
 
 ### OpenCode
 

@@ -194,6 +194,10 @@ tags, no framing, no file-operation instructions.
   clear + stage the content where the include reads it. (Claude's own
   ``!` `` injection annotates the model-visible message with a
   `● Bash(...)` line, hence the different mechanism.)
+- **Antigravity CLI (`agy`)**: a frontmatter-only skill (so `/prompt`
+  exists as a slash command) plus a `PreInvocation` hook that pops locally
+  and injects the prompt as a genuine user message — agy has no include or
+  substitution primitive, but its hooks can inject trajectory steps.
 
 See [`commands/README.md`](./commands/README.md) for the templates, hook
 script, and install steps.
