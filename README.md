@@ -174,8 +174,8 @@ knowing, from actually measuring it (not guessing):
   add maybe another ~20ms, and the rest is the file read/archive/write. If
   `/prompt` still feels slow, that latency lives in the *agent host's* own
   prompt-construction path, not in anything this package does — there's no
-  nvim process in this path at all. Claude Code's variant adds one hook
-  subprocess (`map pop --stage`, same ~60-85ms budget).
+nvim process in this path at all. Claude Code's and Grok's variants add
+one hook subprocess (`map pop --stage`, same ~60-85ms budget).
 
 ## Agent integration
 
@@ -185,7 +185,9 @@ clearing the scratch file all run locally while the prompt is being built.
 The model receives the draft **verbatim** — a handoff is indistinguishable
 from the user having typed it into the chat box — or, when nothing was
 composed, a single locally-generated notice ("no prompt to hand off"). No
-tags, no framing, no file-operation instructions.
+tags, no framing, no file-operation instructions. (Grok has no splice
+primitive at all — it's the one degraded case, a staged model-side read;
+see the bullet and [`commands/grok/README.md`](./commands/grok/README.md).)
 
 - **OpenCode**: a command file whose ``!`map pop` `` template substitution
   executes at send time and splices only the output into the prompt.
@@ -198,6 +200,15 @@ tags, no framing, no file-operation instructions.
   exists as a slash command) plus a `PreInvocation` hook that pops locally
   and injects the prompt as a genuine user message — agy has no include or
   substitution primitive, but its hooks can inject trajectory steps.
+- **Grok (xAI Build)**: no splice, substitution, or injection primitive
+  exists (verified — no ``!`cmd` ``, no `@file`, no `UserPromptExpansion`),
+  so `/prompt` is a flat command file plus a `UserPromptSubmit` hook that
+  runs `map pop --stage` *before* the model is invoked and writes the
+  popped draft (or the empty-handoff notice) to the staged
+  `.ma/prompt/handoff.md`; the command body then tells the model to read
+  that staged copy and treat it as the message. The pop stays host-side
+  and exactly-once; the unavoidable residue is the short read-only command
+  body and the model's own `read_file` of the staged file.
 
 See [`commands/README.md`](./commands/README.md) for the per-host
 comparative table, templates, hook scripts, and install steps —

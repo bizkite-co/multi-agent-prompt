@@ -2,9 +2,9 @@
 
 Why every host's `/prompt` is built the way it is. Per-host mechanics live
 in each host's README ([opencode](./opencode/README.md),
-[claude](./claude/README.md), [agy](./agy/README.md)); the comparative
-table is in the [index](./README.md). Everything below applies to all of
-them.
+[claude](./claude/README.md), [agy](./agy/README.md),
+[grok](./grok/README.md)); the comparative table is in the [index](./README.md).
+Everything below applies to all of them.
 
 ## The message is the prompt, verbatim
 
@@ -24,6 +24,17 @@ wait" is load-bearing: without it some models treat the notice as a problem
 to investigate — reading files, chasing the tool source — instead of a
 dead end to report (observed with opencode's default model).
 
+**Grok is the exception to "verbatim", and the rule holds as tightly as
+that platform allows.** Grok has no splice, substitution, or injection
+primitive, so the content can reach the model only through a read. The
+command body is a deliberately *minimal read-only contract* — "read the
+file, treat it as the message, and never modify/archive/delete/run
+anything" — and names no tools (`map`, `pop`, archive paths) and points at
+exactly one path besides the staged file (the scratch file, only to say
+"do not read it"). Models have followed it faithfully in testing; the
+principle is the same one Claude's skill-collision risk
+illustrates — every word in the body is a word a model has to not misuse.
+
 ## Capture safety — a pop may never lose the prompt
 
 Archiving and clearing happen only once the content is guaranteed to be in
@@ -38,12 +49,19 @@ the outgoing message, and each host gets there differently:
   carries the content.
 - **agy**: the hook pops and injects in one call — the popped text becomes
   a `userMessage` trajectory step before the model is invoked.
+- **Grok**: `UserPromptSubmit` fires *before* the model is invoked and runs
+  `map pop --stage`, staging the popped text (or the notice) where the
+  command body reads it — the scratch file is already cleared and archived
+  before the model is ever called.
 
 ## Exactly-once
 
 - **OpenCode**: one substitution per send, by construction.
 - **Claude Code**: one `UserPromptExpansion` per command expansion, by
   construction.
+- **Grok**: one `UserPromptSubmit` per submit, by construction — the hook
+  fires once per typed `/prompt`, so no ledger is needed (unlike agy);
+  verified: a submit both stages and archives exactly once.
 - **agy**: `PreInvocation` fires before *every* model call, so the hook
   needs guards: it acts only when the *last* user step is the literal
   `/prompt` request, and keeps a per-conversation handled-step ledger
@@ -52,12 +70,15 @@ the outgoing message, and each host gets there differently:
 
 ## Failure-swallowing
 
-Hooks print nothing (Claude) or `{}` (agy) and exit 0, swallowing every
-error: this is housekeeping and must never block or stall a conversation.
-Worst case without a hook: the scratch file isn't reset for the next
-`/prompt`. Claude's hook is additionally silent because a
-`UserPromptSubmit`-family hook's stdout gets injected as extra context —
-exactly the noise this design refuses to emit.
+Hooks print nothing (Claude, Grok) or `{}` (agy) and exit 0, swallowing
+every error: this is housekeeping and must never block or stall a
+conversation. Worst case without a hook: the scratch file isn't reset for
+the next `/prompt` — Grok's model sees the command body's "nothing to act
+on // say so and wait" fallback instead of a handoff. Claude's hook is
+additionally silent because a `UserPromptSubmit`-family hook's stdout gets
+injected as extra context — exactly the noise this design refuses to emit.
+(Grok can't inject anything, so its silence is about not stalling the
+submit, and keeping the hook's working directory unambiguous.)
 
 ## Collision rules
 
@@ -67,6 +88,12 @@ exactly the noise this design refuses to emit.
   source of agents rejecting handoffs as "misdirected drafts".
 - **agy**: the skill *is* the command — skills auto-convert to slash
   commands — so it is frontmatter-only, empty body by design.
+- **Grok**: native `.grok/commands/prompt.md` (project, then user) wins the
+  bare `/prompt` name over Grok's auto-import of the Claude Code skill
+  family — verified on this machine, no compat config needed. Two rules:
+  never install a Grok *skill* named `prompt` (same-named-skill mechanics
+  as Claude — the body goes to the model as instructions), and keep the
+  command body to the read-only contract.
 - **OpenCode**: command only. The portable read-only fallback skill
   ([../skills/README.md](../skills/README.md)) is exclusively for hosts
   with no local-expansion primitives at all.
@@ -74,17 +101,18 @@ exactly the noise this design refuses to emit.
 ## Restart semantics
 
 TUIs cache command templates, skills, and hook configs at startup:
-opencode commands, Claude Code commands, agy skills and hooks (agy offers
-`/skills reload` without a restart). After editing a template, restart
+opencode commands, Claude Code commands, agy skills and hooks, Grok's
+commands and hooks (agy offers `/skills reload`, Grok a `/hooks`
+extensions modal, without a restart). After editing a template, restart
 running sessions — a stale cached template once served the old framing
 text to a live session, which is how the pre-purge wording survived the
 purge.
 
 ## Version floor
 
-Claude Code's hook needs `map` ≥ 0.1.4 (`--stage`). On older installs the
-hook fails silently (by design) and the symptom is `/prompt` reading a
-stale or empty handoff — `map self-up` fixes it.
+Claude Code's and Grok's hooks need `map` ≥ 0.1.4 (`--stage`). On older
+installs the hook fails silently (by design) and the symptom is `/prompt`
+reading a stale or empty handoff — `map self-up` fixes it.
 
 ## What the model actually sees
 
@@ -97,7 +125,15 @@ stale or empty handoff — `map self-up` fixes it.
   agy's own framing for any slash command: the literal `/prompt` trigger
   text plus its "explicitly invoked the (prompt) skill" scaffolding around
   the deliberately-empty skill body.
+- **Grok**: the prompt, **plus** the literal `/prompt` trigger, the short
+  read-only command body, and the model's own `read_file` of the staged
+  `.ma/prompt/handoff.md`. This is the most residue of any host — the
+  platform offers no way around it (no splice, no injection, no
+  substitution) — so the body is engineered to be exactly a read contract
+  and nothing else.
 
 A handoff is indistinguishable from the user having typed the prompt into
 the chat box; when nothing was composed, the entire message is the
-locally-generated empty-handoff notice.
+locally-generated empty-handoff notice. (Grok is the one host where the
+handoff is *visible* as a machine step — the trade-off for the strongest
+mechanism its hooks allow.)

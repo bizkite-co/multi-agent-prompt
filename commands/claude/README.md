@@ -68,6 +68,13 @@ The hook, in `~/.claude/settings.json`:
 - The hook fires on any `/prompt`-named slash command expansion
   (`command_name` match), from any source — that's the intent.
 
+## Documentation sources
+
+- Slash commands (`!` execution, `@` file references, personal vs project):
+  <https://docs.anthropic.com/en/docs/claude-code/slash-commands>
+- Hooks reference (events, JSON I/O, exit codes):
+  <https://docs.anthropic.com/en/docs/claude-code/hooks>
+
 See [../README.md](../README.md) for the comparative view,
 [../decisions.md](../decisions.md) for the cross-cutting rules, and
 [../turn-end.md](../turn-end.md) for the turn-end hook surface.

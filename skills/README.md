@@ -9,7 +9,8 @@ otherwise touching the file.
 The handoff itself is supposed to be invisible to the model: hosts with
 local expansion primitives do the read-splice-archive-clear entirely
 client-side (see [`commands/README.md`](../commands/README.md) — opencode
-``!` `` substitution, Claude Code `@`-include + hook). This skill exists
+``!` `` substitution, Claude Code `@`-include + hook, Grok's staged
+model-side read). This skill exists
 only for hosts with no such machinery, and for natural-language asks like
 "read my prompt file". Where a `/prompt` command file is installed, prefer
 it — the skill never needs to run.
@@ -37,7 +38,16 @@ zero model involvement) — see
 [`commands/README.md`](../commands/README.md). Install the skill only for
 natural-language asks on hosts without the command.
 
-### Other hosts (Cursor, Copilot, Grok)
+### Grok — use the command + hook instead
+
+Grok's `/prompt` is built from a flat command file plus a `UserPromptSubmit`
+hook that pops host-side and stages the result for the model to read — see
+[`commands/grok/README.md`](../commands/grok/README.md). Don't install this
+fallback skill for Grok: a same-named skill would win the `/prompt` name,
+and its instruction body ("read the file") is exactly the model-driven
+behavior the staged-read design exists to constrain.
+
+### Other hosts (Cursor, Copilot)
 
 Copy `skills/prompt` into that host's skills location. If the host doesn't
 support skills at all, `@prompt.md` / `@.ma/prompt/current.md` (file

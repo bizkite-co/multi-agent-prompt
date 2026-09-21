@@ -35,5 +35,11 @@ ln -sfn "$(pwd)/commands/opencode/prompt.md" ~/.config/opencode/commands/prompt.
 
 Restart the TUI after installing — commands are discovered at startup.
 
+## Documentation sources
+
+- Commands, templates, `$ARGUMENTS`, shell interpolation:
+  <https://opencode.ai/docs/commands>
+- Plugins: <https://opencode.ai/docs/plugins>
+
 See [../README.md](../README.md) for the comparative view and
 [../decisions.md](../decisions.md) for the cross-cutting rules.

@@ -71,6 +71,11 @@ The hook, in `~/.gemini/config/hooks.json`:
   `.agents/hooks.json` at a repo root) for per-project use; global is the
   default recommendation.
 
+## Documentation sources
+
+- Hooks (`PreInvocation` and friends, JSON contract):
+  <https://antigravity.google/docs/hooks>
+
 See [../README.md](../README.md) for the comparative view,
 [../decisions.md](../decisions.md) for the cross-cutting rules, and
 [../turn-end.md](../turn-end.md) for the turn-end hook surface.
