@@ -187,6 +187,24 @@ def test_status_reports_states(fake_home, capsys):
     assert "hook entry installed" in out
 
 
+def test_status_flags_conflicting_hook_entry(fake_home, capsys):
+    """A hook entry with a different command must read 'hook entry missing',
+    not the always-true 'installed' (aliasing regression: status compared the
+    merged object to itself)."""
+    root = fake_home / ".claude"
+    settings = root / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(
+        json.dumps({"hooks": {"UserPromptExpansion": [{"hooks": [{"type": "command", "command": "python3 /old/scripts/prompt-pop.py", "timeout": 15}]}]}})
+    )
+    rc, out = run(["hosts", "status", "--host", "claude"], capsys)
+    assert rc == 0
+    assert "hook entry missing" in out
+    run(["hosts", "install", "--host", "claude"])
+    rc, out = run(["hosts", "status", "--host", "claude"], capsys)
+    assert "hook entry installed" in out
+
+
 def test_host_filter_limits_scope(fake_home):
     run(["hosts", "install", "--host", "claude"])
     assert (fake_home / ".claude" / "settings.json").exists()

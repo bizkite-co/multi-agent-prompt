@@ -333,8 +333,9 @@ def status_host(name: str, root: Path) -> list[str]:
         path = root / rel
         try:
             loaded = _read_json(path)
+            before = copy.deepcopy(loaded)
             merged = _merge_entry(name, loaded, entry)
-            state = "hook entry installed" if merged == loaded else "hook entry missing"
+            state = "hook entry installed" if merged == before else "hook entry missing"
         except (ValueError, TypeError):
             state = "unreadable JSON (not touched)"
         lines.append(f"    {rel}: {state}")
