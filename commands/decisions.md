@@ -112,7 +112,34 @@ purge.
 
 Claude Code's and Grok's hooks need `map` ≥ 0.1.4 (`--stage`). On older
 installs the hook fails silently (by design) and the symptom is `/prompt`
-reading a stale or empty handoff — `map self-up` fixes it.
+reading a stale or empty handoff — `map self-up` fixes it. `map hosts`
+(the one-command installer) ships in ≥ 0.1.8, so provisioning requires a
+fresh install too.
+
+## CLI provisioner (`map hosts`)
+
+`map hosts install` is the supported install path; the manual steps in
+each host README are the equivalent by hand. Its policy mirrors the
+"never lose, never clobber" rules above:
+
+- **Platform-local roots.** Each host's config root resolves from the
+  platform the *running* `map` is on — Windows: `%USERPROFILE%`/
+  `%APPDATA%`; elsewhere: `~` / `$XDG_CONFIG_HOME`. Run it in every shell
+  you use: PowerShell wires the native-Windows hosts (the fix for the
+  WSL-only-install problem where Windows agy had no `/prompt`), WSL wires
+  the WSL ones.
+- **Idempotent and additive.** Re-running is a no-op. Our files are either
+  created, left alone when identical, or skipped when they differ —
+  replaced only with `--force`. `settings.json` / `hooks.json` merges add
+  only our own hook entry (matched by its exact command string) and never
+  reformat or remove anything else; unreadable JSON is reported and left
+  untouched.
+- **Nothing deleted that we didn't install.** `uninstall` removes only the
+  files we wrote and our own hook entry — a user-modified file is skipped
+  unless `--force`. Empty directories created by the installer are pruned
+  back up to the config root.
+- **`--dry-run` / `--host`.** Preview exactly what would change, or scope
+  to a single host.
 
 ## What the model actually sees
 

@@ -44,7 +44,15 @@ exactly once.
 
 ## Install (global)
 
-Grok scans `~/.grok/commands/*.md` as user slash commands and
+One command (writes `~/.grok/commands/prompt.md`,
+`~/.grok/hooks/map-prompt-pop.py`, and the hook file
+`~/.grok/hooks/map-prompt.json` — on Windows all under `%USERPROFILE%\.grok`):
+
+```bash
+map hosts install --host grok
+```
+
+By hand — Grok scans `~/.grok/commands/*.md` as user slash commands and
 `~/.grok/hooks/*.json` as global (always-trusted) hooks:
 
 ```bash

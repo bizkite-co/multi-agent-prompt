@@ -30,6 +30,27 @@ model's only possible access to the content is reading the staged copy —
 strictly better than the fallback skill (which assumes nothing is hosed
 host-side at all).
 
+## Install with one command
+
+The `map` CLI itself can wire these up per host — it writes each host's
+`prompt.md` template and hook script into that host's own config root and
+merges the hook entries into existing config, idempotently:
+
+```sh
+map hosts status            # what's detected / missing on this platform
+map hosts install           # wire opencode, claude, agy, grok
+map hosts install --host agy
+map hosts --dry-run install
+```
+
+Run it in **every shell you use**: Windows PowerShell wires the
+native-Windows config roots (`%USERPROFILE%` / `%APPDATA%`), WSL wires the
+WSL ones (`~` / `$XDG_CONFIG_HOME`). Conservative by design — re-runs are
+no-ops, differing content is replaced only with `--force`, and JSON merges
+only add (or remove) the installer's own entries. Wait for `map self-up`
+if your `map` predates 0.1.8. Manual install steps per host below remain
+valid either way.
+
 ## Where to read what
 
 - **Per-host mechanics and install steps**: each host's `README.md`

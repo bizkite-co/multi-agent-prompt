@@ -22,15 +22,23 @@ Instead `/prompt` is built from two local primitives:
 
 ## Install
 
-The command, as a personal slash command (symlinked back to the repo so
-edits propagate):
+One command (writes `~/.claude/commands/prompt.md`,
+`~/.claude/hooks/map-prompt-pop.py`, and merges the hook entry into
+`~/.claude/settings.json` — on Windows all under `%USERPROFILE%\.claude`):
+
+```bash
+map hosts install --host claude
+```
+
+By hand, the command as a personal slash command (symlinked back to the
+repo so edits propagate):
 
 ```bash
 mkdir -p ~/.claude/commands
 ln -sfn "$(pwd)/commands/claude/prompt.md" ~/.claude/commands/prompt.md
 ```
 
-The hook, in `~/.claude/settings.json`:
+By hand, the hook in `~/.claude/settings.json`:
 
 ```json
 {

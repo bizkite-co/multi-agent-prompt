@@ -24,6 +24,10 @@ map = "multi_agent_prompt.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/multi_agent_prompt"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"commands" = "multi_agent_prompt/_payload/commands"
+"hosts" = "multi_agent_prompt/_payload/hosts"
+
 [tool.hatch.metadata]
 allow-direct-references = true
 

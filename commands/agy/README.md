@@ -31,8 +31,17 @@ into the middle of the turn.
 
 ## Install
 
-Global — agy discovers skills from `~/.gemini/config/skills/`, hooks from
-`~/.gemini/config/hooks.json`:
+One command (writes `~/.gemini/config/skills/prompt/SKILL.md`,
+`~/.gemini/config/hooks/map-prompt-pop.py`, and merges the hook entry into
+`~/.gemini/config/hooks.json` — on Windows all under
+`%USERPROFILE%\.gemini\config`):
+
+```bash
+map hosts install --host agy
+```
+
+By hand — global; agy discovers skills from `~/.gemini/config/skills/`,
+hooks from `~/.gemini/config/hooks.json`:
 
 ```bash
 mkdir -p ~/.gemini/config/skills/prompt ~/.gemini/config

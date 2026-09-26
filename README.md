@@ -224,6 +224,32 @@ touching the file. Never install it where a `/prompt` command file exists
 exactly the model-driven file-op noise the command design avoids). See
 [`skills/README.md`](./skills/README.md).
 
+### Install every host with one command
+
+`map hosts install` wires `/prompt` into each agent CLI this machine
+actually runs — it writes each host's command/skill template and hook
+script into that host's *own* config root (on Windows:
+`%USERPROFILE%` / `%APPDATA%`; elsewhere: `~` / `$XDG_CONFIG_HOME`), and
+merges the required hook entries into each host's existing config. Run it
+in **every shell you use** — a run in PowerShell wires the native-Windows
+hosts, a run in WSL wires the WSL ones:
+
+```sh
+uv tool upgrade multi-agent-prompt   # `map hosts` ships in 0.1.8+
+map hosts status                     # what's detected / missing on this platform
+map hosts install                    # wire opencode, claude, agy, grok
+map hosts install --host claude      # just one host
+map hosts uninstall                  # remove what the installer wrote
+```
+
+The installer is conservative by design: re-running it is a no-op
+(idempotent), it never replaces a file whose content differs from ours
+unless you pass `--force`, and `settings.json` / `hooks.json` merges only
+ever gain (or remove) the installer's **own** hook entry — hooks you
+configured yourself are left exactly as you wrote them. `--dry-run` prints
+exactly what would change, `--host` limits scope, broken JSON is reported
+and left untouched, and nothing is deleted that the installer didn't write.
+
 ## Why not tmux `send-keys` / auto-injection?
 
 That's the obvious next step — save, close the pane, and have the tool type

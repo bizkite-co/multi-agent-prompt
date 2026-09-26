@@ -19,14 +19,21 @@ inject and pop together, which is why OpenCode is the reference design.
 
 ## Install
 
-Project-local (travels with the repo):
+One command (writes the global command file into this platform's config
+root — `~/.config/opencode/commands/prompt.md` on Linux/mac, `%APPDATA%\opencode\commands\prompt.md` on Windows):
+
+```bash
+map hosts install --host opencode
+```
+
+By hand, project-local (travels with the repo):
 
 ```bash
 mkdir -p .opencode/commands
 ln -sfn ../../commands/opencode/prompt.md .opencode/commands/prompt.md
 ```
 
-User-global:
+By hand, user-global:
 
 ```bash
 mkdir -p ~/.config/opencode/commands

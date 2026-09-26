@@ -7,7 +7,7 @@ import sys
 import verkit
 from rich.console import Console
 
-from multi_agent_prompt import archive, paths
+from multi_agent_prompt import archive, hosts, paths
 from multi_agent_prompt.editor import (
     DEFAULT_CLEAR_KEY,
     DEFAULT_DEBOUNCE_MS,
@@ -164,6 +164,47 @@ def cmd_self_up(_args: argparse.Namespace) -> int:
         console.print(f"[red]Error upgrading multi-agent-prompt: {e}[/red]")
         return 1
     return 0
+
+
+def cmd_hosts(args: argparse.Namespace) -> int:
+    """`map hosts status|install|uninstall` — wire /prompt into each agent CLI.
+
+    Each subcommand provisions the hosts of the *current* platform/shell, so a
+    run in Windows PowerShell wires the native-Windows agy while a run in WSL
+    wires the WSL hosts. Conservative by design: our files never replace
+    different content without --force, and settings/hooks JSON only ever gains
+    (or removes) our own entries.
+    """
+    if args.hosts_command is None:
+        print("usage: map hosts {status|install|uninstall} [--host NAME ...]")
+        return 0
+
+    names = list(args.host) if getattr(args, "host", None) else list(hosts.HOSTS)
+    for name in names:
+        if not hosts.known_host(name):
+            print(f"error: unknown host '{name}' (expected one of: {', '.join(hosts.HOSTS)})", file=sys.stderr)
+            return 2
+
+    rc = 0
+    for name in names:
+        root = hosts.config_root(name)
+        if root is None:
+            print(f"error: no config root for host '{name}' on this platform", file=sys.stderr)
+            rc = 1
+            continue
+        if args.hosts_command == "status":
+            for line in hosts.status_host(name, root):
+                print(line)
+            continue
+        print(f"{name}  root: {root}")
+        if args.hosts_command == "install":
+            ok, lines = hosts.install_host(name, root, force=args.force, dry_run=args.dry_run)
+        else:
+            ok, lines = hosts.uninstall_host(name, root, force=args.force, dry_run=getattr(args, "dry_run", False))
+        for line in lines:
+            print(f"  {line}")
+        rc = rc or (0 if ok else 1)
+    return rc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -333,6 +374,49 @@ def build_parser() -> argparse.ArgumentParser:
         "self-up", help="Upgrade the installed `map` tool to the latest PyPI release via uv"
     )
     up_parser.set_defaults(func=cmd_self_up)
+
+    hosts_parser = subparsers.add_parser(
+        "hosts",
+        help=(
+            "Provision /prompt into the agent CLIs this machine runs "
+            "(opencode, claude, agy, grok)"
+        ),
+    )
+    h_sub = hosts_parser.add_subparsers(dest="hosts_command")
+    h_install = h_sub.add_parser(
+        "install", help="Install or refresh each host's command template and hook"
+    )
+    h_install.add_argument(
+        "--host", action="append", choices=hosts.HOSTS, help="Only this host (repeatable)"
+    )
+    h_install.add_argument(
+        "--dry-run", action="store_true", help="Show what would change without writing"
+    )
+    h_install.add_argument(
+        "--force", action="store_true", help="Replace a file whose content differs from ours"
+    )
+    h_install.set_defaults(hosts_command="install")
+    h_status = h_sub.add_parser(
+        "status", help="Report which hosts are detected and how each integration looks"
+    )
+    h_status.add_argument(
+        "--host", action="append", choices=hosts.HOSTS, help="Only this host (repeatable)"
+    )
+    h_status.set_defaults(hosts_command="status")
+    h_uninstall = h_sub.add_parser(
+        "uninstall", help="Remove the integration files and hook entries we installed"
+    )
+    h_uninstall.add_argument(
+        "--host", action="append", choices=hosts.HOSTS, help="Only this host (repeatable)"
+    )
+    h_uninstall.add_argument(
+        "--dry-run", action="store_true", help="Show what would be removed without touching"
+    )
+    h_uninstall.add_argument(
+        "--force", action="store_true", help="Remove a file that differs from what we installed"
+    )
+    h_uninstall.set_defaults(hosts_command="uninstall")
+    hosts_parser.set_defaults(func=cmd_hosts)
 
     version_parser = subparsers.add_parser(
         "version", help="Show version, promote, tag, or run a full release"
