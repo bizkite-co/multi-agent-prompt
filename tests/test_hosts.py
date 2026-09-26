@@ -10,6 +10,7 @@ def fake_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("MAP_HOSTS_HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setattr(hosts, "on_windows", lambda: False)
     return home
 
